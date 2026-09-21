@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@x402/cardano": "file:../../x402/typescript/packages/mechanisms/cardano",
-    "@x402/core": "file:../../x402/typescript/packages/core",
-    "@x402/express": "file:../../x402/typescript/packages/http/express",
+    "@x402/cardano": "2.26.0",
+    "@x402/core": "2.26.0",
+    "@x402/express": "2.26.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2"

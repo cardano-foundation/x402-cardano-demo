@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@evolution-sdk/evolution": "^0.5.9",
-    "@x402/cardano": "file:../../x402/typescript/packages/mechanisms/cardano",
-    "@x402/core": "file:../../x402/typescript/packages/core",
+    "@x402/cardano": "2.26.0",
+    "@x402/core": "2.26.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

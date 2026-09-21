@@ -1,58 +1,49 @@
 import type { PaymentMethod } from "../x402/flow";
 
-interface MethodOption {
+export interface DemoMethod {
   id: PaymentMethod;
+  path: string;
   label: string;
   price: string;
+  asset: string;
+  amount: string;
 }
 
-const OPTIONS: MethodOption[] = [
-  { id: "default", label: "Address-to-address", price: "2 tADA" },
-  { id: "masumi", label: "Masumi escrow-lock", price: "5 tADA" },
-  { id: "usdm", label: "Native token", price: "0.10 tUSDM" },
-  { id: "masumi-usdm", label: "Masumi + token", price: "0.25 tUSDM" },
-];
-
 interface MethodPickerProps {
+  methods: DemoMethod[];
   method: PaymentMethod;
   onChange: (method: PaymentMethod) => void;
   disabled?: boolean;
 }
 
-/** Which route Step B pays: the plain `default` address-to-address transfer,
- * or `masumi`, which locks funds into an escrow contract instead. Both speak
- * identical x402 wire protocol — this only picks which server route (and
- * therefore which `assetTransferMethod`) gets exercised. */
-export function MethodPicker({ method, onChange, disabled }: MethodPickerProps) {
+/** Route terms come from the resource server so this picker never invents a
+ * price, asset, or availability that the next 402 will contradict. */
+export function MethodPicker({ methods, method, onChange, disabled }: MethodPickerProps) {
   return (
-    <div className="method-picker">
-      <div className="method-picker__control" role="radiogroup" aria-label="Payment method">
-        {OPTIONS.map((option) => (
-          <button
+    <fieldset className="method-picker" disabled={disabled}>
+      <legend>Payment route</legend>
+      <div className="method-picker__control">
+        {methods.map((option) => (
+          <label
             key={option.id}
-            type="button"
-            role="radio"
-            aria-checked={method === option.id}
             className="method-picker__option"
             data-selected={method === option.id}
-            onClick={() => onChange(option.id)}
-            disabled={disabled}
           >
-            <span className="method-picker__option-label">{option.label}</span>
-            <span className="method-picker__option-price mono-tag">{option.price}</span>
-          </button>
+            <input
+              type="radio"
+              name="payment-method"
+              aria-label={`${option.label} ${option.price}`}
+              value={option.id}
+              checked={method === option.id}
+              onChange={() => onChange(option.id)}
+            />
+            <span>
+              <span className="method-picker__option-label">{option.label}</span>
+              <span className="method-picker__option-price mono-tag">{option.price}</span>
+            </span>
+          </label>
         ))}
       </div>
-      {(method === "masumi" || method === "masumi-usdm") && (
-        <p className="step-note">
-          <strong>This locks funds into the real escrow — it doesn&rsquo;t pay the seller.</strong> The payment
-          goes to the <code>vested_pay</code> script address, carrying a 19-field inline datum. That address is no
-          longer a stand-in: the facilitator applies the deployment parameters to the canonical blueprint, derives
-          the address itself, and rejects any other <code>payTo</code>. Releasing locked funds needs the Masumi
-          escrow lifecycle (result submission, refund, dispute) — <strong>spending the UTxO back is not
-          possible</strong>. Keep the amounts small.
-        </p>
-      )}
-    </div>
+    </fieldset>
   );
 }

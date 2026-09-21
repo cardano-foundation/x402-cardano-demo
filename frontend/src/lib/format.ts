@@ -55,9 +55,14 @@ const ERROR_EXPLANATIONS: Record<string, string> = {
   invalid_exact_cardano_payload_asset_mismatch: "The transaction pays in a different asset than the server requested.",
   invalid_exact_cardano_payload_amount_insufficient: "The transaction pays less than the server's price.",
   invalid_exact_cardano_payload_min_utxo_insufficient: "The payment output is below Cardano's minimum UTxO size.",
-  exact_cardano_settlement_not_confirmed: "The transaction reached the mempool but wasn't included in a block before the facilitator's timeout.",
-  exact_cardano_settlement_failed: "The facilitator could not submit the transaction to the network.",
+  settlement_pending: "Settlement has not reached a final result yet. Check this same payment again; do not sign a replacement.",
+  exact_cardano_settlement_not_confirmed: "The requested confirmation depth was not reached before the facilitator stopped waiting.",
+  exact_cardano_settlement_failed: "The facilitator could not complete settlement on Cardano.",
+  exact_cardano_settlement_definitively_rejected: "Cardano definitively rejected this transaction, so it is safe to start a new payment.",
+  exact_cardano_facilitator_evidence_unavailable: "The facilitator could not determine the transaction's current on-chain status.",
   duplicate_settlement: "This exact nonce has already been settled once — replay protection is doing its job.",
+  masumi_terms_unknown: "The facilitator no longer has the issued Masumi terms for this payment.",
+  masumi_terms_mismatch: "The submitted Masumi payment does not match the terms issued for this request.",
 };
 
 export function explainErrorCode(code: string): string | undefined {

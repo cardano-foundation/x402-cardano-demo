@@ -27,7 +27,7 @@ export const ACTORS: ActorInfo[] = [
     id: "facilitator",
     label: "Facilitator",
     role: "Verifies + settles",
-    blurb: "Checks the signed transaction is genuine, broadcasts it, and waits for the chain to confirm.",
+    blurb: "Checks the signed transaction, submits it, and reports settlement back to the seller.",
   },
   {
     id: "chain",
