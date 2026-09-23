@@ -24,21 +24,21 @@ export const STEP_COPY: Record<StepId, StepCopy> = {
   required: {
     label: "Server names its price",
     actor: "seller",
-    why: "402 Payment Required carries a PAYMENT-REQUIRED header: a signed, machine-readable menu of exactly what the seller will accept — scheme, network, amount, and the address to pay. Nothing here is negotiable; the client either meets these terms or doesn't get the resource.",
+    why: "402 Payment Required carries a machine-readable PAYMENT-REQUIRED header with the scheme, network, amount, and payment address. The client can inspect those exact terms before asking the wallet to sign.",
   },
   build: {
     label: "Wallet builds and signs",
     actor: "you",
-    why: "This is the only step your wallet does real work. It picks one of its own UTxOs to spend as an unforgeable nonce — spending it is what proves this exact payment can never be replayed — builds a transaction paying the seller, and asks you to approve the signature. Nothing is broadcast yet.",
+    why: "The browser builds the requested payment from unspent wallet inputs and asks your wallet to approve the signature. One input identifies this payment for the facilitator. Nothing is broadcast yet.",
   },
   pay: {
     label: "Retried with proof of payment",
     actor: "you",
-    why: "The identical GET fires again, this time carrying a PAYMENT-SIGNATURE header with the signed transaction. The seller doesn't verify Cardano signatures itself — it hands the header to a facilitator, a specialist that checks the signature and can broadcast the transaction on its behalf.",
+    why: "The identical GET fires again with a PAYMENT-SIGNATURE header containing the signed transaction. The seller asks its facilitator to verify the payment and submit it to Cardano; the browser never broadcasts it.",
   },
   settled: {
-    label: "Confirmed on-chain",
+    label: "Receipt and resource",
     actor: "facilitator",
-    why: "The facilitator submits the transaction to preprod and waits for a block to include it — this is real settlement, not a promise. Once confirmed, the seller's response finally carries the resource, along with a PAYMENT-RESPONSE receipt: the transaction hash your wallet just paid with.",
+    why: "When the payment meets the requested confirmation policy, the seller returns the protected resource and a PAYMENT-RESPONSE receipt. Pending payments are checked automatically. If those checks pause, use Check this payment again; no new wallet approval is needed.",
   },
 };

@@ -1,14 +1,15 @@
-import type { FlowStep, PaymentMethod } from "../x402/flow";
+import type { FlowStep } from "../x402/flow";
 import { STEP_COPY, STEP_ORDER, type StepId } from "../lib/stepCopy";
 import { asPaymentRequired, pickCardanoRequirements } from "../lib/x402Types";
 import { StepCard, type StepStatus } from "./StepCard";
 import { SettlementWait } from "./SettlementWait";
 import { CodeAside } from "./CodeAside";
 import type { RunState } from "./ControlPanel";
+import type { DemoMethod } from "./MethodPicker";
 
 interface TimelineProps {
   steps: FlowStep[];
-  method: PaymentMethod;
+  method: DemoMethod;
   runState: RunState;
   errorStepId?: StepId;
   errorMessage?: string;
@@ -20,9 +21,6 @@ interface TimelineProps {
  * `/api/message-masumi`'s handler), but the settled step's static copy
  * (`STEP_COPY.settled`) doesn't know which route ran. This fills that one gap
  * without having to fork STEP_COPY per method. */
-const MASUMI_SETTLED_NOTE =
-  "For the masumi method, “confirmed” means the 5 tADA is now locked in the demo escrow — not delivered to the seller.";
-
 export function Timeline({ steps, method, runState, errorStepId, errorMessage, payStartedAt }: TimelineProps) {
   const byId = new Map(steps.map((s) => [s.id, s]));
   const requiredStep = byId.get("required");
@@ -33,7 +31,7 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
   return (
     <section className="timeline-section" aria-label="Protocol steps">
       <div className="timeline-section__intro">
-        <h2>Five steps, one HTTP round trip (plus one retry)</h2>
+        <h2>Five visible stages, from 402 to receipt</h2>
         <CodeAside />
       </div>
 
@@ -52,7 +50,12 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
               maxTimeoutSeconds={id === "build" ? maxTimeoutSeconds : undefined}
               showWait={id === "pay" && Boolean(step) && !byId.has("settled") && runState === "running"}
               payStartedAt={payStartedAt}
-              methodNote={id === "settled" && method === "masumi" ? MASUMI_SETTLED_NOTE : undefined}
+              displayPrice={method.price}
+              methodNote={
+                id === "settled" && (method.id === "masumi" || method.id === "masumi-usdm")
+                  ? `This payment uses Masumi escrow for ${method.price}; it does not pay the seller directly.`
+                  : undefined
+              }
             />
           );
         })}
@@ -71,6 +74,7 @@ function stepStatus(
   if (index < reachedCount) return "done";
   if (errorStepId === id) return "error";
   if (runState === "running" && index === reachedCount) return "active";
+  if (runState === "uncertain" && index === reachedCount) return "paused";
   return "pending";
 }
 
@@ -84,6 +88,7 @@ interface StepCardSlotProps {
   showWait: boolean;
   payStartedAt: number | null;
   methodNote?: string;
+  displayPrice: string;
 }
 
 /** A `StepCard` plus, only for `pay`, the settlement-wait interstitial that
@@ -98,6 +103,7 @@ function StepCardSlot({
   showWait,
   payStartedAt,
   methodNote,
+  displayPrice,
 }: StepCardSlotProps) {
   return (
     <>
@@ -110,6 +116,7 @@ function StepCardSlot({
         error={error}
         maxTimeoutSeconds={maxTimeoutSeconds}
         methodNote={methodNote}
+        displayPrice={displayPrice}
       />
       {showWait && payStartedAt !== null && (
         <li className="timeline__interstitial">

@@ -1,24 +1,23 @@
-const SNIPPET = `import { wrapFetchWithPayment } from "@x402/fetch";
+const SNIPPET = `import { x402Client } from "@x402/core/client";
+import { x402HTTPClient } from "@x402/core/http";
 
-const pay = wrapFetchWithPayment(fetch, client);
-const res = await pay(sellerUrl);`;
+const core = new x402Client();
+const http = new x402HTTPClient(core);`;
 
 /**
- * Everything the timeline below unpacks step by step is, in production
- * client code, this one call. Keeping it visible nearby is the point: the
- * demo's job is to make the one-liner legible, not to replace it.
+ * The published core and HTTP clients own the protocol encoding that the
+ * timeline makes visible.
  */
 export function CodeAside() {
   return (
     <aside className="code-aside">
-      <p className="code-aside__eyebrow">In production, this is one line</p>
+      <p className="code-aside__eyebrow">Published client APIs</p>
       <pre className="artifact artifact--code">
         <code>{SNIPPET}</code>
       </pre>
       <p className="code-aside__caption">
-        <code>wrapFetchWithPayment</code> probes for the 402, builds and signs the payment, retries, and waits for
-        settlement — automatically, on every call. This page unpacks that single line into the five steps below so
-        you can watch what your HTTP client is doing on your behalf.
+        <code>x402HTTPClient</code> parses the 402 headers and encodes the signed payment. This page keeps those
+        operations separate so you can inspect each protocol artifact.
       </p>
     </aside>
   );

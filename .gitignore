@@ -8,3 +8,5 @@ data/
 .env.local
 facilitator/.mvstore/
 *.tsbuildinfo
+playwright-report/
+test-results/

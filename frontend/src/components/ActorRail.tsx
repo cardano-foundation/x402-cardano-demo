@@ -57,8 +57,8 @@ const PHASE_SUMMARY: Record<RailPhase, string> = {
   required: "The seller is naming its price.",
   build: "Your wallet is building and signing the payment transaction.",
   pay: "The seller is asking the facilitator to verify your signed payment.",
-  waiting: "The facilitator is waiting for Cardano preprod to include the transaction in a block.",
-  settled: "The payment is confirmed on-chain and the resource has unlocked.",
+  waiting: "The facilitator is waiting for Cardano preprod to reach the requested confirmation depth.",
+  settled: "The resource was returned with a settlement receipt.",
 };
 
 interface ActorRailProps {

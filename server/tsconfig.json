@@ -5,13 +5,9 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
-    // The @x402/* deps are npm `file:` links into a pnpm workspace (see
-    // ../x402/typescript). Without this, TS resolves imports made *inside*
-    // those packages (e.g. @x402/express's own `import ... from "express"`)
-    // against their real pnpm-workspace location instead of this project's
-    // node_modules, picking up a different (v5) @types/express there and
-    // producing a false Request/Response type mismatch on app.use(...).
-    "preserveSymlinks": true
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

@@ -13,15 +13,13 @@ interface WalletPickerProps {
   connection: WalletConnection | null;
   connectError: string | null;
   onSelect: (key: string) => void;
+  disabled?: boolean;
 }
 
-const PREPROD_NETWORK_ID = 0;
-
-export function WalletPicker({ wallets, connecting, connection, connectError, onSelect }: WalletPickerProps) {
+export function WalletPicker({ wallets, connecting, connection, connectError, onSelect, disabled }: WalletPickerProps) {
   if (connection) {
-    const onPreprod = connection.networkId === PREPROD_NETWORK_ID;
     return (
-      <div className="wallet-connected" data-network-ok={onPreprod}>
+      <div className="wallet-connected">
         <div className="wallet-connected__identity">
           <span className="wallet-connected__dot" aria-hidden="true" />
           <span className="mono-tag wallet-connected__address" title={connection.address}>
@@ -29,13 +27,14 @@ export function WalletPicker({ wallets, connecting, connection, connectError, on
           </span>
         </div>
         <span className="wallet-connected__network">
-          {onPreprod ? "Preprod" : `Wrong network (id ${connection.networkId})`}
+          Testnet wallet
         </span>
-        {!onPreprod && (
-          <p className="wallet-connected__warning">
-            This wallet is not on Cardano Preprod. Switch its network in the extension before starting the flow.
-          </p>
-        )}
+        <button type="button" className="btn btn--ghost" onClick={() => onSelect(connection.key)} disabled={disabled || connecting !== null}>
+          Reconnect wallet
+        </button>
+        <p className="wallet-connected__note">
+          Live inputs are checked against preprod before signing.
+        </p>
       </div>
     );
   }
@@ -67,7 +66,7 @@ export function WalletPicker({ wallets, connecting, connection, connectError, on
               type="button"
               className="wallet-option"
               onClick={() => onSelect(wallet.key)}
-              disabled={connecting !== null}
+              disabled={disabled || connecting !== null}
               aria-busy={connecting === wallet.key}
             >
               {wallet.icon ? (
@@ -81,7 +80,7 @@ export function WalletPicker({ wallets, connecting, connection, connectError, on
           </li>
         ))}
       </ul>
-      {connectError && <p className="wallet-picker__error">{connectError}</p>}
+      {connectError && <p className="wallet-picker__error" role="alert">{connectError}</p>}
     </div>
   );
 }

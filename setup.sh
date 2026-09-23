@@ -1,18 +1,16 @@
-#!/usr/bin/env bash
-# Builds the sibling x402 TypeScript workspace so this demo's npm `file:` links
-# resolve to compiled packages. Run once before `npm install` in server/ or frontend/.
-set -euo pipefail
-X402_TS="$(cd "$(dirname "$0")/../x402/typescript" && pwd)"
-echo "Building x402 TypeScript workspace at $X402_TS"
-cd "$X402_TS"
-pnpm install
-# Build only the packages this demo consumes (+ their deps), NOT the whole
-# workspace: the upstream `site` docs package has a pre-existing build failure
-# that is unrelated to the demo and would abort a full `pnpm build`.
-npx turbo run build \
-  --filter=@x402/core \
-  --filter=@x402/cardano \
-  --filter=@x402/express \
-  --filter=@x402/fetch
-echo "Done. Packages with dist/:"
-ls -d packages/core/dist packages/http/express/dist packages/http/fetch/dist packages/mechanisms/cardano/dist
+#!/bin/sh
+# Install the published workspace dependencies and create missing configuration.
+set -eu
+REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$REPO_DIR"
+node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node 22 or newer is required."); process.exit(1); }'
+npm ci
+for component in facilitator server frontend; do
+  if [ ! -e "$component/.env" ]; then
+    cp "$component/.env.example" "$component/.env"
+    printf 'Created %s/.env\n' "$component"
+  else
+    printf 'Kept existing %s/.env\n' "$component"
+  fi
+done
+printf '\nSet the preprod provider IDs and your receiving address in the .env files, then run npm run dev.\n'

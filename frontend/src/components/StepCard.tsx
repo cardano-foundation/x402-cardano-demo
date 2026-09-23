@@ -6,12 +6,11 @@ import {
   asPaymentRequired,
   asSettledDetail,
   pickCardanoRequirements,
-  settlementStatus,
 } from "../lib/x402Types";
 import { ArtifactPanel } from "./ArtifactPanel";
-import { base64ByteLength, explainErrorCode, findErrorCode, formatBytes, lovelaceToAda, shortenMiddle } from "../lib/format";
+import { base64ByteLength, explainErrorCode, findErrorCode, formatBytes, shortenMiddle } from "../lib/format";
 
-export type StepStatus = "pending" | "active" | "done" | "error";
+export type StepStatus = "pending" | "active" | "done" | "error" | "paused";
 
 const ACTIVE_MESSAGE: Partial<Record<StepId, string>> = {
   request: "Sending the unpaid request…",
@@ -34,9 +33,10 @@ interface StepCardProps {
   /** An extra, method-specific caption (currently only used to clarify what
    * "settled" means for the masumi escrow-lock route — see Timeline.tsx). */
   methodNote?: string;
+  displayPrice: string;
 }
 
-export function StepCard({ index, id, copy, status, step, error, maxTimeoutSeconds, methodNote }: StepCardProps) {
+export function StepCard({ index, id, copy, status, step, error, maxTimeoutSeconds, methodNote, displayPrice }: StepCardProps) {
   return (
     <li className="step-card" data-status={status} data-actor={copy.actor}>
       <div className="step-card__rail">
@@ -50,7 +50,7 @@ export function StepCard({ index, id, copy, status, step, error, maxTimeoutSecon
         </header>
         {step && <p className="step-card__wire mono-tag">{step.title}</p>}
         <p className="step-card__why">{copy.why}</p>
-        {methodNote && <p className="step-note">{methodNote}</p>}
+        {step && methodNote && <p className="step-note">{methodNote}</p>}
 
         {status === "active" && ACTIVE_MESSAGE[id] && (
           <p className="step-card__active-note">{ACTIVE_MESSAGE[id]}</p>
@@ -58,14 +58,14 @@ export function StepCard({ index, id, copy, status, step, error, maxTimeoutSecon
 
         {status === "error" && error && <ErrorNote message={error} />}
 
-        {step && <StepArtifact step={step} maxTimeoutSeconds={maxTimeoutSeconds} />}
+        {step && <StepArtifact step={step} maxTimeoutSeconds={maxTimeoutSeconds} displayPrice={displayPrice} />}
       </div>
     </li>
   );
 }
 
 function StatusPill({ status }: { status: StepStatus }) {
-  const label = { pending: "Waiting", active: "In progress", done: "Done", error: "Failed" }[status];
+  const label = { pending: "Waiting", active: "In progress", done: "Done", error: "Failed", paused: "Check needed" }[status];
   return (
     <span className="status-pill" data-status={status}>
       <span className="status-pill__dot" aria-hidden="true" />
@@ -88,16 +88,16 @@ function ErrorNote({ message }: { message: string }) {
 /** Dispatches to the per-step artifact renderer. Each `FlowStep.detail` has a
  * different real shape (see x402Types.ts) — this is where that gets decoded
  * into something a person can read. */
-function StepArtifact({ step, maxTimeoutSeconds }: { step: FlowStep; maxTimeoutSeconds?: number }) {
+function StepArtifact({ step, maxTimeoutSeconds, displayPrice }: { step: FlowStep; maxTimeoutSeconds?: number; displayPrice: string }) {
   switch (step.id) {
     case "request":
       return <RequestArtifact detail={step.detail} />;
     case "required":
-      return <RequiredArtifact detail={step.detail} />;
+      return <RequiredArtifact detail={step.detail} displayPrice={displayPrice} />;
     case "build":
       return <BuildArtifact detail={step.detail} maxTimeoutSeconds={maxTimeoutSeconds} />;
     case "pay":
-      return <PayArtifact detail={step.detail} />;
+      return <PayArtifact detail={step.detail} displayPrice={displayPrice} />;
     case "settled":
       return <SettledArtifact detail={step.detail} />;
   }
@@ -122,7 +122,7 @@ function RequestArtifact({ detail }: { detail: { url: string; status: number } }
   );
 }
 
-function RequiredArtifact({ detail }: { detail: unknown }) {
+function RequiredArtifact({ detail, displayPrice }: { detail: unknown; displayPrice: string }) {
   const required = asPaymentRequired(detail);
   const accepted = pickCardanoRequirements(required);
 
@@ -133,7 +133,7 @@ function RequiredArtifact({ detail }: { detail: unknown }) {
         <dl className="spec-list">
           <div>
             <dt>Price</dt>
-            <dd className="mono-tag mono-tag--accent">{lovelaceToAda(accepted.amount)}</dd>
+            <dd className="mono-tag mono-tag--accent">{displayPrice}</dd>
           </div>
           <div>
             <dt>Network</dt>
@@ -191,7 +191,7 @@ function BuildArtifact({
   );
 }
 
-function PayArtifact({ detail }: { detail: unknown }) {
+function PayArtifact({ detail, displayPrice }: { detail: unknown; displayPrice: string }) {
   const payload = asPaymentPayload(detail);
   const header = encodePaymentSignatureHeader(payload);
   return (
@@ -199,7 +199,7 @@ function PayArtifact({ detail }: { detail: unknown }) {
       <dl className="spec-list">
         <div>
           <dt>Paying</dt>
-          <dd className="mono-tag mono-tag--accent">{lovelaceToAda(payload.accepted.amount)}</dd>
+          <dd className="mono-tag mono-tag--accent">{displayPrice}</dd>
         </div>
         <div>
           <dt>Header</dt>
@@ -214,11 +214,11 @@ function PayArtifact({ detail }: { detail: unknown }) {
 
 function SettledArtifact({ detail }: { detail: unknown }) {
   const { settle, body } = asSettledDetail(detail);
-  const status = settlementStatus(settle);
   const failed = settle ? settle.success === false : false;
+  const mempool = settle?.success && settle.extra?.status === "mempool";
 
   return (
-    <div className="settled-artifact" data-outcome={failed ? "failed" : status === "mempool" ? "pending" : "confirmed"}>
+    <div className="settled-artifact" data-outcome={failed ? "failed" : mempool ? "mempool" : "confirmed"}>
       {settle?.transaction && (
         <a
           className="tx-chip"
@@ -226,7 +226,7 @@ function SettledArtifact({ detail }: { detail: unknown }) {
           target="_blank"
           rel="noreferrer"
         >
-          <span className="tx-chip__label">{failed ? "Transaction" : status === "mempool" ? "Broadcast" : "Confirmed"} on preprod</span>
+          <span className="tx-chip__label">View transaction on preprod</span>
           <span className="mono-tag">{shortenMiddle(settle.transaction, 12, 8)}</span>
           <span className="tx-chip__arrow" aria-hidden="true">
             ↗
@@ -234,18 +234,17 @@ function SettledArtifact({ detail }: { detail: unknown }) {
         </a>
       )}
 
+      {mempool && (
+        <p className="step-note" role="status">
+          The facilitator accepted this transaction, but it is not yet confirmed in a block.
+          It may still be dropped; the explorer may not show it yet.
+        </p>
+      )}
       {failed && (
         <ErrorNote
           message={settle?.errorMessage ?? settle?.errorReason ?? "The facilitator reported the settlement failed."}
         />
       )}
-      {!failed && status === "mempool" && (
-        <p className="settled-artifact__note">
-          Broadcast, but the facilitator's confirmation window elapsed before a block included it. The resource
-          still unlocked — the transaction is in the mempool and should land shortly.
-        </p>
-      )}
-
       <div className="resource-card">
         <p className="resource-card__eyebrow">Paid-for resource</p>
         <pre className="artifact">
