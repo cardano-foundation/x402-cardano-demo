@@ -121,6 +121,12 @@ npm run check-purchase   # the Masumi start_job answer passes Sokosumi's checks
   ```
 - **Hiring it.** The Sokosumi web app no longer has a Hire button; the catalog is for browsing. Hire the agent through **Soko Bot** (ask it to use your agent by name) or through Sokosumi's API (`POST /v1/agents/{id}/jobs`). Sokosumi's payment node pays from Sokosumi's wallet, so you don't need tUSDM for this.
 
+**From this demo's UI.** Put a Sokosumi API key in `.env` (`SOKOSUMI_API_KEY`, from Sokosumi's **Developer → API keys**) and restart `npm run dev`. The UI then offers a third way to pay: **Sokosumi credits**. It creates the job through Sokosumi's API, and Sokosumi hires the agent exactly as Soko Bot would. The rail follows the Sokosumi job to its result.
+- **Your key stays on this machine.** The agent uses it through a proxy on `127.0.0.1:8788`. Your tunnel doesn't forward that port, and the proxy only answers the local UI.
+- **It needs the agent to be visible on Sokosumi.** Until then, Sokosumi answers "not shown" (a 404).
+- **The agent is found by `AGENT_NAME`.** If several Sokosumi agents share that name, or Sokosumi displays a different name, set `SOKOSUMI_AGENT_ID`.
+- **`SOKOSUMI_MAX_CREDITS`** caps what one job may cost.
+
 You can follow the job in the agent's log:
 
 ```

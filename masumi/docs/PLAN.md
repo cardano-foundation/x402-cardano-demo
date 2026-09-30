@@ -360,3 +360,42 @@ Exported functions get concise TSDoc.
 **Most likely wrong**
 1. `collect`'s full scan of the shared escrow address could be slow on Blockfrost if preprod holds thousands of escrow UTxOs. Mitigation: `collect` is manual and paginated; if it's too slow, remember lock refs per job instead.
 2. Trust in the unlisted offer: the buyer checks only the seller's signature, not the registry. Pinning `terms.sellerAddress` to the registered seller is possible but not done; the UI shows the seller address.
+
+---
+
+## Addendum B — hire via Sokosumi from the UI (2026-09-30)
+
+**Goal.** The UI gets a third way to buy a job: "via Sokosumi". It creates a Sokosumi job for this agent with the operator's Sokosumi API key and shows the job's status and result. Sokosumi then hires the agent through the standard path (MIP-003 `start_job`, its payment node locks the tUSDM), paid with Sokosumi credits.
+
+**Decisions (user):** the key lives in `masumi/.env`, used through an agent-side proxy. Build now and verify against a stub Sokosumi, because the agent is still hidden there (live hires 404).
+
+**Design**
+
+| Change | Where | Risk |
+|---|---|---|
+| `SOKOSUMI_API_KEY` (optional; the feature is off without it), `SOKOSUMI_API_URL` (default `https://api.preprod.sokosumi.com/v1`), `SOKOSUMI_AGENT_ID` (optional), `SOKOSUMI_MAX_CREDITS` (optional cap per job) | `config.ts`, `.env.example` | Low |
+| Small client that unwraps `{ data, meta }`. Paging contract: `GET /agents?kind=cardano&limit=50&cursor=<id>`, following `meta.pagination.nextCursor` until it is null (`sokosumi helpers/pagination.ts:35-46`). The unique-match check spans all pages. `agentId()` uses `SOKOSUMI_AGENT_ID`, or else pages through `GET /agents?kind=cardano` for an **exact, unique** `AGENT_NAME` match and fails otherwise. Also `inputSchema(id)`, `createJob(id, { inputData, inputSchema, maxCredits })` and `job(id)`. A 404 on the agent explains that Sokosumi doesn't list or show it. `fetch` is injectable | `src/sokosumi.ts` (new) | Medium |
+| **Operator-only proxy on a separate port, bound to 127.0.0.1** (`SOKOSUMI_PROXY_PORT`, default 8788): `POST /sokosumi/hire {text}` and `GET /sokosumi/jobs/:id`. Your tunnel forwards only to the public agent port, so the internet can't reach it. **Browsers can**, through DNS rebinding or cross-site posts from a page you have open. So the proxy also:
+- rejects any `Host` other than `127.0.0.1:<port>` or `localhost:<port>` (Vite forwards with `changeOrigin: true`);
+- rejects any `Origin` other than the local UI (`http://localhost:5174` / `http://127.0.0.1:5174`). A missing Origin (curl) is allowed;
+- requires `Content-Type: application/json` and sends no CORS headers;
+- validates the text (1-500 characters) before calling Sokosumi.
+
+It never retries the create call (a retry would be a second paid job) and returns only `{ id, status, result, name }`, never the key. `SOKOSUMI_ORGANIZATION_SLUG` (optional) is sent on both the create and the read, for credits held by an organization; without it the key user's personal workspace pays | `agent.ts` | ⚠ auth (spends credits), Medium |
+| Vite proxies `/sokosumi` to that port, and `/demo/config` reports `sokosumi: { enabled }` | `vite.config.ts`, `agent.ts` | Low |
+| UI: a third "Pay with" option, "Sokosumi credits". It has its own rail and shows the Sokosumi job id and result. No wallet is needed for this option. Every Sokosumi status is mapped: `payment_pending` → paying; `started`, `processing`, `result_pending` → working; `completed` → done. Everything else (`failed`, `payment_failed`, `input_required`, `refund_*`, `dispute_*`) is terminal: "stopped: <status>", and polling ends. The button stays disabled while the create request is in flight. The job `name` is sent, so Sokosumi skips generating one | `ui/App.tsx` | Low |
+| README section and a DEVELOPER note (proxy, port isolation, visibility dependency) | docs | Low |
+
+**Acceptance**
+- C1: `test/sokosumi.test.ts` (stubbed fetch) passes. It sends a Bearer header on every call and unwraps `data`. It resolves the agent by `SOKOSUMI_AGENT_ID`, or by a unique exact name across pages, and rejects zero or several matches. `createJob` posts `{ inputSchema, inputData: { text }, maxCredits? }` to `/agents/{id}/jobs`. A 404 carries the visibility hint.
+- C1b: the stub serves the real paging shape; the test asserts the client sends `cursor=<nextCursor>`, stops on null, and finds a match on page 2.
+- C2: with a local fake Sokosumi (`SOKOSUMI_API_URL` pointing at a Node stub server), `POST 127.0.0.1:8788/sokosumi/hire` returns a job, and `GET /sokosumi/jobs/:id` returns its status and result. The public agent port answers 404 on `/sokosumi/*`. Without `SOKOSUMI_API_KEY`, the proxy doesn't start and `/demo/config` says it's disabled. `POST` with `Host: evil.example` → 403, with `Origin: https://evil.example` → 403, with `text/plain` → 415; none of them reach the stub.
+- C2b: a pure `sokosumiStage(status)` maps every Sokosumi status; the unit test covers all 12 values and asserts `failed` is terminal.
+- C3: typecheck, all tests and the build pass, including the standalone copy.
+- C4 (live, yours, once the agent is visible): a hire from the UI completes on Sokosumi preprod.
+
+**Non-goals.** Handling Sokosumi's `input_required`, refunds or disputes; multi-user access; exposing the proxy beyond this machine.
+
+**Most likely wrong**
+1. Name-based lookup. `GET /agents` exposes no registry id, so matching `AGENT_NAME` could hit someone else's agent with the same name. Mitigation: exact and unique match, or set `SOKOSUMI_AGENT_ID`, which the UI shows after the first lookup. Sokosumi may also show a metadata-override name that differs from `AGENT_NAME`; then set `SOKOSUMI_AGENT_ID`.
+2. Response shapes are read from Sokosumi's source at `8327114`, not from the live preprod API. The client parses defensively and reports unexpected shapes.

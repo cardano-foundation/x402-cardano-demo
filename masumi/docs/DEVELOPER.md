@@ -236,6 +236,13 @@ It never calls `/availability`; the registry does.
 - Lovelace is not a default x402 asset: the client must allow it explicitly in `spendControls`, capped at the price, or it rejects the offer (or pays uncapped).
 - Sokosumi and the standard path are unaffected.
 
+**Hiring via Sokosumi from the UI** (`src/sokosumi.ts`, the proxy at the end of `agent.ts`). With `SOKOSUMI_API_KEY` set, the UI can create a Sokosumi job for the agent. The calls are `GET /v1/agents?kind=cardano` (paged by `meta.pagination.nextCursor`) or `SOKOSUMI_AGENT_ID`, then `GET /v1/agents/{id}/input-schema`, `POST /v1/agents/{id}/jobs` and `GET /v1/jobs/{id}`. All use the user API key as a Bearer token, and responses come wrapped as `{ data, meta }`.
+- **Where it runs.** The key is used only by a proxy bound to `127.0.0.1` on its own port. The tunnel forwards only the agent port.
+- **Browser defences.** The proxy checks `Origin` and requires JSON. For direct hits it also checks `Host`. For requests through Vite (`xfwd`) it checks `X-Forwarded-Host` (the UI's host) and `X-Forwarded-For` (loopback), with Vite's own host check in front. So pages open in the operator's browser can't spend credits through DNS rebinding or cross-site posts, and neither can LAN clients if Vite runs with `--host`.
+- **No retries.** The create call is never retried, because a retry would be a second paid job.
+- **Status mapping.** Every Sokosumi job status maps to a UI stage (`sokosumiStage`), and anything unexpected ends polling.
+- **Visibility.** Sokosumi's hire path uses the same visibility filter as its catalog, so a hidden agent returns 404 here too.
+
 **Why x402 has its own route.** x402 quotes can't double as MIP-003 responses: the library signs a domain-separated `termsDigest`, not the Payment Service payload. So the two paths issue separate signatures and nonces. They share the seller key, the escrow, the datum shape and the watcher.
 
 ## 5. Security invariants
@@ -278,6 +285,7 @@ npm run typecheck && npm test && npm run build
 | `test/standard-path.test.ts` | Our HTTP `start_job` body through Sokosumi's schema and forwarding and the Payment Service's `/purchase` checks, using Mesh `checkSignature` from `@meshsdk/core-cst@1.9.0-beta.90`, the version the Payment Service pins. Drifted payloads must fail |
 | `test/registry.test.ts` | The registry-claim validator: accept, and reject on wrong price, token, network, URL, holder, escrow or a Blockfrost failure |
 | `test/lockMatch.test.ts` | Lock matching: a genuine lock passes, every spoof fails, and tADA and tUSDM payments are not interchangeable |
+| `test/sokosumi.test.ts` | Sokosumi client: Bearer auth, envelope, cursor paging, unique name match, create body, the 404 hint, and the status-to-stage mapping for all 12 statuses |
 | `test/chain.test.ts` | x402 lock lookup by transaction: only unspent, non-collateral escrow outputs; an unknown transaction yields nothing |
 
 `test/vendor/paymentServiceVerifier.ts` shares **no code** with `src/`. After Masumi or Sokosumi change their purchase flow, update the port from the cited files and rerun the tests. Against a running agent, `npm run check-quote` and `npm run check-purchase` run the same checks on live HTTP responses, and `npm run check-registry` validates the on-chain entry.

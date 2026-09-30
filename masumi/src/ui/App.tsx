@@ -9,12 +9,16 @@ import { ExactCardanoScheme } from "@x402/cardano/exact/client";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import type { ResourceInfo } from "@x402/core/types";
 import { formatTusdm, NETWORK, unitKey } from "../constants.js";
-
-const price = (o: Offer) => o.asset === "lovelace" ? `${(Number(o.amount) / 1e6).toFixed(2)} tADA` : formatTusdm(o.amount);
+import { sokosumiStage, type SokosumiStage } from "../sokosumi.js";
 import { createCip30Signer } from "./cip30Signer.js";
 
+const price = (o: Offer) => o.asset === "lovelace" ? `${(Number(o.amount) / 1e6).toFixed(2)} tADA` : formatTusdm(o.amount);
+/** The pseudo offer "pay with Sokosumi credits": Sokosumi hires the agent on the standard path. */
+const VIA_SOKOSUMI = "sokosumi";
+
 interface Offer { path: string; amount: string; asset: string; resource: string; registered: boolean }
-interface Config { agentIdentifier: string; sellerAddress: string; escrowAddress: string; offers: Offer[] }
+interface Config { agentIdentifier: string; sellerAddress: string; escrowAddress: string; offers: Offer[]; sokosumi?: { enabled: boolean } }
+interface SokosumiView { stage: "creating" | SokosumiStage; id?: string; status?: string; result?: string | null }
 interface JobView { id: string; status: "awaiting_payment" | "running" | "completed" | "failed"; lockTx?: string; resultTx?: string; result?: string; error?: string; unlockTime?: number }
 interface Wallet { name: string; icon: string; enable(): Promise<unknown> }
 
@@ -36,6 +40,13 @@ const RAIL: Array<{ stage: Stage; title: string; hint: string }> = [
   { stage: "submitted", title: "Result submitted", hint: "The result hash is on chain. The seller can collect after the unlock time." },
 ];
 const order = RAIL.map(r => r.stage);
+const SOKOSUMI_RAIL: Array<{ stage: SokosumiView["stage"]; title: string; hint: string }> = [
+  { stage: "creating", title: "Job created at Sokosumi", hint: "Sokosumi calls the agent's start_job and receives signed escrow terms." },
+  { stage: "paying", title: "Sokosumi pays into escrow", hint: "Its payment node locks the price from Sokosumi's wallet; you pay in credits." },
+  { stage: "working", title: "Agent working", hint: "The agent found the lock on chain, runs the job and submits the result hash." },
+  { stage: "done", title: "Result delivered", hint: "Sokosumi fetched the result from the agent." },
+];
+const sokosumiOrder = SOKOSUMI_RAIL.map(r => r.stage);
 
 export function App() {
   const [config, setConfig] = useState<Config>();
@@ -43,7 +54,9 @@ export function App() {
   const [wallet, setWallet] = useState<{ name: string; api: unknown }>();
   const [text, setText] = useState("hello masumi");
   const [offerPath, setOfferPath] = useState("/x402/start_job");
+  const viaSokosumi = offerPath === VIA_SOKOSUMI && Boolean(config?.sokosumi?.enabled);
   const offer = config?.offers.find(o => o.path === offerPath) ?? config?.offers[0];
+  const [soko, setSoko] = useState<SokosumiView>();
   const [stage, setStage] = useState<Stage>("idle");
   const [job, setJob] = useState<JobView>();
   const [lockTx, setLockTx] = useState<string>();
@@ -117,8 +130,46 @@ export function App() {
     }
   }
 
+  /** Hires the agent through Sokosumi (operator's API key, via the local proxy) and follows the job. */
+  async function hireViaSokosumi() {
+    setError(undefined); setSoko({ stage: "creating" });
+    try {
+      let created: { id?: string; status?: string; result?: string | null; error?: string };
+      try {
+        const response = await fetch("/sokosumi/hire", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        created = await response.json().catch(() => ({ error: `Sokosumi hire failed (HTTP ${response.status}).` }));
+        if (!response.ok && created.error) throw new Error(created.error);
+      } catch (e) {
+        // The outcome of a create call we did not hear back from is unknown.
+        throw new Error(`${e instanceof Error ? e.message : String(e)} The job may still have been created: check your jobs on Sokosumi before hiring again.`);
+      }
+      if (!created.id) throw new Error("Sokosumi did not return a job id. Check your jobs on Sokosumi before hiring again.");
+      let failures = 0;
+      for (let current = created; ; ) {
+        const stageNow = sokosumiStage(current.status ?? "");
+        setSoko({ stage: stageNow, id: created.id, status: current.status, result: current.result });
+        if (stageNow === "done") return;
+        if (stageNow === "stopped") throw new Error(`Sokosumi stopped the job: ${current.status}.`);
+        await sleep(5000);
+        // Reading is safe to retry; the job keeps running (and costing credits) regardless.
+        try {
+          const poll = await fetch(`/sokosumi/jobs/${created.id}`);
+          const next = await poll.json().catch(() => ({})) as typeof created;
+          if (!poll.ok || !next.status) throw new Error(next.error ?? `HTTP ${poll.status}`);
+          current = next; failures = 0;
+        } catch (e) {
+          if (++failures >= 6) throw new Error(`Lost track of Sokosumi job ${created.id} (${e instanceof Error ? e.message : e}). It may still complete; check it on Sokosumi.`);
+        }
+      }
+    } catch (e) {
+      setSoko(previous => ({ ...previous, stage: "stopped" }));
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const reached = (s: Stage) => stage !== "idle" && stage !== "failed" && order.indexOf(s) <= order.indexOf(stage);
-  const busy = !["idle", "submitted", "failed"].includes(stage);
+  const sokoReached = (s: SokosumiView["stage"]) => Boolean(soko) && soko!.stage !== "stopped" && sokosumiOrder.indexOf(s) <= sokosumiOrder.indexOf(soko!.stage);
+  const busy = !["idle", "submitted", "failed"].includes(stage) || Boolean(soko && !["done", "stopped"].includes(soko.stage));
   const unlockIn = job?.unlockTime ? Math.max(0, job.unlockTime - now) : undefined;
 
   return (
@@ -131,7 +182,7 @@ export function App() {
       <div className="columns">
         <section className="job" aria-labelledby="job-heading">
           <h2 id="job-heading">Your job</h2>
-          {!wallet ? (
+          {viaSokosumi ? <p className="muted">Sokosumi hires the agent with your Sokosumi credits. No wallet needed.</p> : !wallet ? (
             <div className="wallets">
               {wallets.length === 0 && <p className="muted">No Cardano wallet found. Install Eternl or Lace and switch it to preprod.</p>}
               {wallets.map(w => (
@@ -142,15 +193,21 @@ export function App() {
             </div>
           ) : <p className="muted">Paying with {wallet.name}. The wallet needs tADA for fees{offer?.asset !== "lovelace" ? " and Masumi tUSDM for the price" : ""}.</p>}
 
-          {config && config.offers.length > 1 && (
+          {config && (config.offers.length > 1 || config.sokosumi?.enabled) && (
             <fieldset className="currency" disabled={busy}>
               <legend>Pay with</legend>
               {config.offers.map(o => (
                 <label key={o.path}>
-                  <input type="radio" name="offer" checked={o.path === offer?.path} onChange={() => setOfferPath(o.path)} />
+                  <input type="radio" name="offer" checked={o.path === offer?.path} onChange={() => { setOfferPath(o.path); setError(undefined); }} />
                   {price(o)}{o.registered ? " (registered price)" : " (unlisted: not checked against the registry)"}
                 </label>
               ))}
+              {config.sokosumi?.enabled && (
+                <label>
+                  <input type="radio" name="offer" checked={viaSokosumi} onChange={() => { setOfferPath(VIA_SOKOSUMI); setError(undefined); }} />
+                  Sokosumi credits (Sokosumi hires the agent)
+                </label>
+              )}
             </fieldset>
           )}
 
@@ -158,11 +215,26 @@ export function App() {
             <span>Text to transform</span>
             <textarea value={text} maxLength={500} rows={3} onChange={e => setText(e.target.value)} disabled={busy} />
           </label>
-          <button className="primary" onClick={payAndRun} disabled={!wallet || !offer || busy || !text.trim()}>
-            {busy ? "Working…" : `Pay ${offer ? price(offer) : ""} and run`}
-          </button>
+          {viaSokosumi ? (
+            <button className="primary" onClick={hireViaSokosumi} disabled={busy || !text.trim()}>{busy ? "Working…" : "Hire via Sokosumi"}</button>
+          ) : (
+            <button className="primary" onClick={payAndRun} disabled={!wallet || !offer || busy || !text.trim()}>
+              {busy ? "Working…" : `Pay ${offer ? price(offer) : ""} and run`}
+            </button>
+          )}
           {error && <p className="error" role="alert">{error}</p>}
 
+          {viaSokosumi ? (
+            <ol className="rail" aria-label="Sokosumi job progress">
+              {SOKOSUMI_RAIL.map(step => (
+                <li key={step.stage} className={sokoReached(step.stage) ? "reached" : ""} aria-current={soko?.stage === step.stage ? "step" : undefined}>
+                  <strong>{step.title}</strong>
+                  <span>{step.hint}</span>
+                  {step.stage === "creating" && soko?.id && <span className="hash">Sokosumi job {soko.id}{soko.status ? ` (${soko.status})` : ""}</span>}
+                </li>
+              ))}
+            </ol>
+          ) : (
           <ol className="rail" aria-label="Escrow progress">
             {RAIL.map(step => (
               <li key={step.stage} className={reached(step.stage) ? "reached" : ""} aria-current={stage === step.stage ? "step" : undefined}>
@@ -173,8 +245,17 @@ export function App() {
               </li>
             ))}
           </ol>
+          )}
 
-          {job?.result && (
+          {viaSokosumi && soko?.result && (
+            <div className="result">
+              <h3>Result</h3>
+              <p className="output">{soko.result}</p>
+              <p className="muted">Paid through Sokosumi. The seller can collect about 60 min after the job started, with npm run collect.</p>
+            </div>
+          )}
+
+          {!viaSokosumi && job?.result && (
             <div className="result">
               <h3>Result</h3>
               <p className="output">{job.result}</p>
