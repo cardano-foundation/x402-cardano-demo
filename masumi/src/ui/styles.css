@@ -1,0 +1,84 @@
+:root {
+  --paper: #eef2f6;
+  --surface: #ffffff;
+  --ink: #1b2a41;
+  --muted: #5b6b82;
+  --line: #c9d3df;
+  --locked: #b77a0c;   /* funds held in escrow */
+  --released: #1f7a6b; /* result on chain */
+  --danger: #b3261e;
+  --sans: "Public Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #10161f;
+    --surface: #17202c;
+    --ink: #e6ecf3;
+    --muted: #93a3b8;
+    --line: #2a3646;
+    --locked: #e0a93a;
+    --released: #4fb8a5;
+    --danger: #f2b8b5;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 1rem/1.55 var(--sans); }
+a { color: inherit; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--locked); outline-offset: 2px; }
+
+.page { max-width: 68rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+.masthead { max-width: 44rem; margin-bottom: 2.5rem; }
+.masthead h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+.masthead p { color: var(--muted); margin: 0; }
+
+.columns { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 2.5rem; align-items: start; }
+@media (max-width: 52rem) { .columns { grid-template-columns: 1fr; } }
+
+h2 { font-size: 1.25rem; margin: 0 0 1rem; }
+h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
+.muted { color: var(--muted); }
+.hash { font-family: var(--mono); font-size: 0.85rem; overflow-wrap: anywhere; }
+
+.job { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.75rem; }
+.wallets { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.wallet { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.9rem; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.wallet:hover { border-color: var(--ink); }
+
+.field { display: grid; gap: 0.35rem; margin: 1rem 0; font-weight: 500; }
+textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem; resize: vertical; }
+.primary { font: 700 1rem var(--sans); padding: 0.8rem 1.3rem; border: 0; border-radius: 8px; background: var(--ink); color: var(--paper); cursor: pointer; }
+.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.error { color: var(--danger); margin: 1rem 0 0; }
+
+/* The escrow rail: one line that fills as the payment moves through escrow. */
+.rail { list-style: none; margin: 2rem 0 0; padding: 0; }
+.rail li { position: relative; display: grid; gap: 0.15rem; padding: 0 0 1.4rem 2rem; color: var(--muted); }
+.rail li::before { content: ""; position: absolute; left: 0.35rem; top: 0.45rem; width: 0.7rem; height: 0.7rem; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); }
+.rail li::after { content: ""; position: absolute; left: calc(0.7rem - 1px); top: 1.35rem; bottom: 0; width: 2px; background: var(--line); }
+.rail li:last-child::after { display: none; }
+.rail li strong { color: var(--ink); font-weight: 500; }
+.rail li span { font-size: 0.9rem; }
+.rail li.reached::before { border-color: var(--locked); background: var(--locked); }
+.rail li.reached::after { background: var(--locked); }
+.rail li.reached:last-child::before { border-color: var(--released); background: var(--released); }
+.rail li[aria-current="step"]::before { box-shadow: 0 0 0 5px color-mix(in srgb, var(--locked) 25%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .rail li::before, .rail li::after { transition: background-color 400ms ease, border-color 400ms ease; }
+}
+
+.result { border-top: 1px solid var(--line); padding-top: 1rem; }
+.result h3 { margin-top: 0; }
+.output { font-family: var(--mono); font-size: 1.15rem; color: var(--released); overflow-wrap: anywhere; margin: 0 0 0.5rem; }
+
+.agent { padding-top: 0.25rem; }
+.agent dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.4rem 1rem; margin: 1rem 0; }
+.agent dt { color: var(--muted); }
+.agent dd { margin: 0; }
+.agent p { margin: 0 0 0.75rem; }
+
+.currency { border: 0; padding: 0; margin: 1rem 0 0; display: grid; gap: 0.35rem; }
+.currency legend { font-weight: 500; margin-bottom: 0.35rem; }
+.currency label { display: flex; align-items: center; gap: 0.5rem; }
