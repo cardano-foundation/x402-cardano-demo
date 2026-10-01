@@ -5,15 +5,17 @@ import { x402ResourceServer, x402HTTPResourceServer, type FacilitatorClient, typ
 import { decodePaymentSignatureHeader } from "@x402/core/http";
 import { paymentMiddlewareFromHTTPServer } from "@x402/express";
 import { ExactCardanoScheme } from "@x402/cardano/exact/server";
-import { decodeCardanoTransaction, masumiEscrowAddress, slotToPosixMs, USDM_PREPROD_ASSET, type MasumiSellerSigner } from "@x402/cardano";
+import { decodeCardanoTransaction, slotToPosixMs, USDM_PREPROD_ASSET } from "@x402/cardano";
+import { agentRouter, sokosumiRouter, type MasumiOptions } from "./masumi.js";
 import { PaymentOperations } from "./paymentOperations.js";
 
 export interface ResourceAppOptions {
   facilitator: FacilitatorClient;
   payTo: string;
-  masumiSeller: MasumiSellerSigner;
   l1Confirmations?: number;
   usdmAsset?: string;
+  /** The Masumi tab's backend (server/src/masumi.ts). Omitted: no /masumi routes. */
+  masumi?: MasumiOptions;
 }
 
 /** Configure the seller without starting a listener or reading credentials. */
@@ -33,15 +35,11 @@ export async function createResourceApp(options: ResourceAppOptions) {
   if (!acceptsLevel(l1Confirmations)) throw new Error(`L1_CONFIRMATIONS must be in the facilitator's range ${range.minimum}..${range.maximum}.`);
   const token = options.usdmAsset || USDM_PREPROD_ASSET;
   const methods = [
-    { id: "default", path: "/api/message", label: "ADA payment", price: "2 tADA", asset: "lovelace", amount: "2000000", escrow: false },
-    { id: "usdm", path: "/api/message-usdm", label: "Native token", price: "0.10 tUSDM", asset: token, amount: "100000", escrow: false },
-    { id: "masumi", path: "/api/message-masumi", label: "Masumi escrow", price: "5 tADA", asset: "lovelace", amount: "5000000", escrow: true },
-    { id: "masumi-usdm", path: "/api/message-masumi-usdm", label: "Masumi with token", price: "0.25 tUSDM", asset: token, amount: "250000", escrow: true },
-  ].filter(method => !method.escrow || available.includes("masumi"));
+    { id: "default", path: "/api/message", label: "ADA payment", price: "2 tADA", asset: "lovelace", amount: "2000000" },
+    { id: "usdm", path: "/api/message-usdm", label: "Native token", price: "0.10 tUSDM", asset: token, amount: "100000" },
+  ];
   const payments = new PaymentOperations();
-  const server = new x402ResourceServer(options.facilitator).register(network,
-    new ExactCardanoScheme({ masumi: { seller: options.masumiSeller } }),
-  );
+  const server = new x402ResourceServer(options.facilitator).register(network, new ExactCardanoScheme());
   const identity = (context: VerifyContext) => {
     const request = (context.transportContext as HTTPTransportContext).request;
     const url = new URL(request.adapter.getUrl());
@@ -50,7 +48,7 @@ export async function createResourceApp(options: ResourceAppOptions) {
     // Bind the cached verification to all original signed bytes and requirements,
     // not merely the transaction hash. Any changed terms must be verified afresh.
     const fingerprint = createHash("sha256").update(JSON.stringify([context.paymentPayload, context.requirements])).digest("hex");
-    return { url, tx, operation, fingerprint };
+    return { tx, operation, fingerprint };
   };
   server.onBeforeVerify(async context => {
     try {
@@ -73,15 +71,7 @@ export async function createResourceApp(options: ResourceAppOptions) {
       return;
     }
     try {
-      const { url, tx, operation, fingerprint } = identity(context);
-      // The official quote binds signed terms to a transaction. This application
-      // also requires its committed resource to be the request being served.
-      if (context.paymentPayload.accepted.extra?.assetTransferMethod === "masumi") {
-        const commitment = context.paymentPayload.accepted.extra.inputCommitment as { parts?: Array<{ content?: { url?: string } }> };
-        if (commitment?.parts?.length !== 1 || commitment.parts[0].content?.url !== url.href) {
-          return { abort: true as const, reason: "payment_resource_mismatch" };
-        }
-      }
+      const { tx, operation, fingerprint } = identity(context);
       const reason = payments.claim(tx.txHash, operation, tx.ttlSlot === undefined ? 0 : slotToPosixMs(network, tx.ttlSlot));
       if (reason) return { abort: true as const, reason };
       payments.rememberVerification(tx.txHash, fingerprint, context.result);
@@ -102,10 +92,10 @@ export async function createResourceApp(options: ResourceAppOptions) {
     if (!handler) {
       handler = (async () => {
         const routes: RoutesConfig = Object.fromEntries(methods.map(method => [`GET ${method.path}`, {
-          accepts: { scheme: "exact", network, payTo: method.escrow ? masumiEscrowAddress(network) : options.payTo,
+          accepts: { scheme: "exact", network, payTo: options.payTo,
             price: { amount: method.amount, asset: method.asset }, maxTimeoutSeconds: 600,
-            extra: { assetTransferMethod: method.escrow ? "masumi" : "default", areFeesSponsored: false, confirmationPolicy: { l1Confirmations: level } } },
-          description: `${method.price} ${method.escrow ? "escrow lock" : "payment"} for a demo message`, mimeType: "application/json",
+            extra: { assetTransferMethod: "default", areFeesSponsored: false, confirmationPolicy: { l1Confirmations: level } } },
+          description: `${method.price} payment for a demo message`, mimeType: "application/json",
           settlementFailedResponseBody: (_context: unknown, result: { errorReason?: string }) => ({ contentType: "application/json", body: { error: result.errorReason ?? "settlement_failed" } }),
         }]));
         const http = new x402HTTPResourceServer(server, routes);
@@ -121,11 +111,17 @@ export async function createResourceApp(options: ResourceAppOptions) {
   // The payment gate and resource routes must recognize exactly the same URLs.
   app.enable("case sensitive routing");
   app.enable("strict routing");
+  // The credit-spending Sokosumi proxy goes first: the open CORS below must never answer for it.
+  const masumi = options.masumi;
+  if (masumi?.sokosumi) {
+    app.use("/masumi/sokosumi", sokosumiRouter({ sokosumi: masumi.sokosumi, frontendOrigins: masumi.frontendOrigins ?? ["http://localhost:5173", "http://127.0.0.1:5173"] }));
+  }
   app.use(cors({ origin: true, allowedHeaders: ["Content-Type", "PAYMENT-SIGNATURE"], exposedHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE"] }));
   app.use(express.json({ limit: "16kb" }));
   app.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   const config = () => ({ l1Confirmations, facilitator: { l1Confirmations: range }, methods });
   app.get("/health", (_req, res) => { res.json({ status: "ok", network }); });
+  if (masumi) app.use("/masumi", agentRouter(masumi));
   app.get("/demo/config", (_req, res) => { res.json(config()); });
   app.post("/demo/config", (req, res) => {
     if (!req.body || Object.keys(req.body).some(k => k !== "l1Confirmations") || !acceptsLevel(req.body.l1Confirmations)) {
@@ -152,7 +148,7 @@ export async function createResourceApp(options: ResourceAppOptions) {
         const payment = decodePaymentSignatureHeader(req.get("PAYMENT-SIGNATURE")!);
         const { txHash } = decodeCardanoTransaction(String(payment.payload.transaction));
         const body = payments.result(txHash, () => ({
-          message: method.escrow ? `Hello from x402 on Cardano! ${method.price} was locked in escrow for this message.` : `Hello from x402 on Cardano! This message was paid for with ${method.price}.`,
+          message: `Hello from x402 on Cardano! This message was paid for with ${method.price}.`,
           paidAt: new Date().toISOString(), operationId: req.query.requestId || txHash,
         }));
         res.json(body);

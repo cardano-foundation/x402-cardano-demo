@@ -3,17 +3,14 @@ import { test } from "node:test";
 import { x402Client } from "@x402/core/client";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import { ExactCardanoScheme } from "@x402/cardano/exact/client";
-import { buildMasumiLock, decodeCardanoTransaction, ERR_CHAIN_LOOKUP_FAILED, minUtxoLovelace, USDM_PREPROD_ASSET, validateMasumiExtra } from "@x402/cardano";
-import { Data } from "@evolution-sdk/evolution";
+import { decodeCardanoTransaction, ERR_CHAIN_LOOKUP_FAILED, minUtxoLovelace, USDM_PREPROD_ASSET } from "@x402/cardano";
 import { providerFixture } from "./provider-fixture.ts";
 import { createFixture } from "./fixtures.ts";
 import { confirmExpiry } from "../facilitator/src/settlement.ts";
 
 const methods = [
-  { path: "/api/message", asset: "lovelace", amount: "2000000", escrow: false },
-  { path: "/api/message-usdm", asset: USDM_PREPROD_ASSET, amount: "100000", escrow: false },
-  { path: "/api/message-masumi", asset: "lovelace", amount: "5000000", escrow: true },
-  { path: "/api/message-masumi-usdm", asset: USDM_PREPROD_ASSET, amount: "250000", escrow: true },
+  { path: "/api/message", asset: "lovelace", amount: "2000000" },
+  { path: "/api/message-usdm", asset: USDM_PREPROD_ASSET, amount: "100000" },
 ];
 
 for (const method of methods) for (const initiallyPending of [false, true]) {
@@ -32,13 +29,7 @@ for (const method of methods) for (const initiallyPending of [false, true]) {
     const output = decoded.outputs.find(output => output.address === required.accepts[0].payTo)!;
     assert.ok(output);
     if (method.asset !== "lovelace") assert.equal(output.assets[method.asset], BigInt(method.amount));
-    if (method.escrow) {
-      const schema = validateMasumiExtra(required.accepts[0].extra, "cardano:preprod");
-      assert.ok(schema.ok);
-      const expected = buildMasumiLock(schema.extra, fixture.payer, method.asset, BigInt(method.amount), 4310n);
-      assert.equal(output.coin, expected.lockedLovelace);
-      assert.equal(output.datum, Data.toCBORHex(expected.datum.data));
-    } else if (method.asset === "lovelace") assert.equal(output.coin, BigInt(method.amount));
+    if (method.asset === "lovelace") assert.equal(output.coin, BigInt(method.amount));
     else assert.ok(output.coin >= minUtxoLovelace(output.serializedSize!, 4310n));
     const headers = { "PAYMENT-SIGNATURE": encodePaymentSignatureHeader(payload) };
     if (initiallyPending) {

@@ -64,8 +64,7 @@ export function ControlPanel({
   return (
     <section className="control-panel" aria-label="Connect a wallet and run the protocol">
       <div className="control-panel__step">
-        <span className="control-panel__step-label mono-tag">Step A</span>
-        <h2>Connect a wallet</h2>
+        <h2 className="section-title"><span className="section-title__n">1</span>Connect a wallet</h2>
         <WalletPicker
           wallets={wallets}
           connecting={connecting}
@@ -76,11 +75,8 @@ export function ControlPanel({
         />
       </div>
 
-      <div className="control-panel__divider" aria-hidden="true" />
-
       <div className="control-panel__step">
-        <span className="control-panel__step-label mono-tag">Step B</span>
-        <h2>Run the protocol</h2>
+        <h2 className="section-title"><span className="section-title__n">2</span>Run the protocol</h2>
 
         {configLoading && (
           <p className="control-panel__hint" role="status">
@@ -150,6 +146,8 @@ export function ControlPanel({
               </div>
             )}
 
+            {/* The action stays in view at the bottom of the controls column. */}
+            <div className="action-bar">
             {runState === "uncertain" ? (
               <button type="button" className="btn btn--primary" onClick={onResume}>
                 Check this payment again
@@ -171,6 +169,7 @@ export function ControlPanel({
             {!connection && (
               <p className="control-panel__hint control-panel__hint--muted">Connect a preprod wallet first.</p>
             )}
+            </div>
           </>
         )}
       </div>
@@ -180,14 +179,6 @@ export function ControlPanel({
 
 function methodHint(method: DemoMethod): string {
   const token = method.asset.toLowerCase() !== "lovelace";
-  const masumi = method.id === "masumi" || method.id === "masumi-usdm";
-
-  if (masumi) {
-    const tokenFunding = token
-      ? " Your wallet also needs test ADA for the fee and the escrow output's minimum ADA."
-      : "";
-    return `${method.price} is locked in Masumi escrow, not delivered to the seller.${tokenFunding} This demo has no release or refund controls, and its x402 authorization is not compatible with the stock Masumi Payment Service.`;
-  }
   if (token) {
     return `${method.price} is paid as a Cardano native token. Your wallet also needs test ADA for the transaction fee and the token output's minimum ADA.`;
   }
@@ -195,7 +186,5 @@ function methodHint(method: DemoMethod): string {
 }
 
 function methodAction(method: DemoMethod): string {
-  return method.id === "masumi" || method.id === "masumi-usdm"
-    ? `Lock ${method.price} in escrow`
-    : `Pay ${method.price}`;
+  return `Pay ${method.price}`;
 }

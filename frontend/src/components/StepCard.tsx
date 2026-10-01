@@ -30,13 +30,10 @@ interface StepCardProps {
    * threaded in so the `build` card can show the TTL actually embedded in
    * the transaction, without flow.ts needing to repeat it. */
   maxTimeoutSeconds?: number;
-  /** An extra, method-specific caption (currently only used to clarify what
-   * "settled" means for the masumi escrow-lock route — see Timeline.tsx). */
-  methodNote?: string;
   displayPrice: string;
 }
 
-export function StepCard({ index, id, copy, status, step, error, maxTimeoutSeconds, methodNote, displayPrice }: StepCardProps) {
+export function StepCard({ index, id, copy, status, step, error, maxTimeoutSeconds, displayPrice }: StepCardProps) {
   return (
     <li className="step-card" data-status={status} data-actor={copy.actor}>
       <div className="step-card__rail">
@@ -50,7 +47,6 @@ export function StepCard({ index, id, copy, status, step, error, maxTimeoutSecon
         </header>
         {step && <p className="step-card__wire mono-tag">{step.title}</p>}
         <p className="step-card__why">{copy.why}</p>
-        {step && methodNote && <p className="step-note">{methodNote}</p>}
 
         {status === "active" && ACTIVE_MESSAGE[id] && (
           <p className="step-card__active-note">{ACTIVE_MESSAGE[id]}</p>

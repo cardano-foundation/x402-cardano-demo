@@ -13,7 +13,7 @@ async function setup(t: TestContext) {
   const fixture = await createFixture();
   const verificationCalls = { count: 0 };
   const facilitator = new x402Facilitator().register("cardano:preprod", new FacilitatorScheme(fixture.chain, { confirmationTimeoutMs: 10, confirmationPollMs: 1 }));
-  const app = await createResourceApp({ facilitator: { getSupported: async () => facilitator.getSupported() as SupportedResponse, verify: (payload, requirements) => { verificationCalls.count++; return facilitator.verify(payload, requirements); }, settle: (payload, requirements) => facilitator.settle(payload, requirements) }, payTo: seller.sellerAddress, masumiSeller: seller });
+  const app = await createResourceApp({ facilitator: { getSupported: async () => facilitator.getSupported() as SupportedResponse, verify: (payload, requirements) => { verificationCalls.count++; return facilitator.verify(payload, requirements); }, settle: (payload, requirements) => facilitator.settle(payload, requirements) }, payTo: seller.sellerAddress });
   const listener = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => listener.once("listening", resolve));
   t.after(() => { listener.closeAllConnections(); listener.close(); });
@@ -75,24 +75,10 @@ test("spent input is rejected before broadcast or resource delivery", async t =>
   assert.equal((await response.json()).message, undefined);
 });
 
-test("Masumi uses fresh official quotes and binds each quote to one transaction", async t => {
-  const ctx = await setup(t);
-  const path = "/api/message-masumi?requestId=escrow&confirmations=1";
-  const first = await ctx.quote(path); const second = await ctx.quote(path);
-  assert.notDeepEqual(first.accepts[0].extra?.terms, second.accepts[0].extra?.terms);
-  const payload = await ctx.client.createPaymentPayload(first);
-  const paid = await ctx.pay(path, encodePaymentSignatureHeader(payload));
-  assert.equal(paid.status, 200, await paid.clone().text());
-  const duplicate = await ctx.client.createPaymentPayload(first);
-  const rejected = await ctx.pay(path, encodePaymentSignatureHeader(duplicate));
-  assert.equal(rejected.status, 402);
-  assert.equal(ctx.state.broadcasts, 1);
-});
-
 test("configuration exposes only usable methods and confirmation levels", async t => {
   const ctx = await setup(t);
   const config = await (await fetch(ctx.origin + "/demo/config")).json();
-  assert.equal(config.methods.length, 4);
+  assert.equal(config.methods.length, 2);
   assert.deepEqual(config.facilitator.l1Confirmations, { minimum: 0, maximum: 20 });
   const bad = await fetch(ctx.origin + "/demo/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ l1Confirmations: -1 }) });
   assert.equal(bad.status, 400);
@@ -100,20 +86,11 @@ test("configuration exposes only usable methods and confirmation levels", async 
   assert.equal(old.status, 400);
 });
 
-test("a Masumi quote cannot be redirected to a different request before first use", async t => {
-  const ctx = await setup(t);
-  const path = "/api/message-masumi?requestId=original&confirmations=1";
-  const payload = await ctx.client.createPaymentPayload(await ctx.quote(path));
-  const redirected = await ctx.pay("/api/message-masumi?requestId=redirected&confirmations=1", encodePaymentSignatureHeader(payload));
-  assert.equal(redirected.status, 402);
-  assert.equal(ctx.state.broadcasts, 0);
-});
-
 test("token routes preserve their token amount and include required ADA", async t => {
   const ctx = await setup(t);
   const { USDM_PREPROD_ASSET, decodeCardanoTransaction } = await import("@x402/cardano");
   const client = x402Client.fromConfig({ schemes: [{ network: "cardano:preprod", client: new ClientScheme(ctx.signer) }], spendControls: { allowedAssets: [{ network: "cardano:preprod", asset: USDM_PREPROD_ASSET, maxAmountPerPayment: "250000" }] } });
-  for (const [route, amount] of [["/api/message-usdm", "100000"], ["/api/message-masumi-usdm", "250000"]]) {
+  for (const [route, amount] of [["/api/message-usdm", "100000"]]) {
     const path = `${route}?requestId=token&confirmations=1`;
     const required = await ctx.quote(path);
     assert.equal(required.accepts[0].asset, USDM_PREPROD_ASSET);
@@ -143,7 +120,7 @@ test("path aliases cannot bypass settlement and expose a pending resource", asyn
   assert.equal(ctx.state.broadcasts, 1);
 });
 
-for (const route of ["/api/message", "/api/message-usdm", "/api/message-masumi", "/api/message-masumi-usdm"]) {
+for (const route of ["/api/message", "/api/message-usdm"]) {
   test(`${route}: expired unconfirmed payment reaches terminal settlement instead of endless verification rejection`, async t => {
     const ctx = await setup(t); ctx.state.confirmations = -1;
     const { USDM_PREPROD_ASSET } = await import("@x402/cardano");

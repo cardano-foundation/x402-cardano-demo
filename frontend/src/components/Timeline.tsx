@@ -1,5 +1,6 @@
 import type { FlowStep } from "../x402/flow";
 import { STEP_COPY, STEP_ORDER, type StepId } from "../lib/stepCopy";
+import { ACTORS } from "../lib/actors";
 import { asPaymentRequired, pickCardanoRequirements } from "../lib/x402Types";
 import { StepCard, type StepStatus } from "./StepCard";
 import { SettlementWait } from "./SettlementWait";
@@ -16,11 +17,6 @@ interface TimelineProps {
   payStartedAt: number | null;
 }
 
-/** For `masumi`, "confirmed" doesn't mean the same thing it does for
- * `default` — the resource server's own response body already says so (see
- * `/api/message-masumi`'s handler), but the settled step's static copy
- * (`STEP_COPY.settled`) doesn't know which route ran. This fills that one gap
- * without having to fork STEP_COPY per method. */
 export function Timeline({ steps, method, runState, errorStepId, errorMessage, payStartedAt }: TimelineProps) {
   const byId = new Map(steps.map((s) => [s.id, s]));
   const requiredStep = byId.get("required");
@@ -30,10 +26,7 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
 
   return (
     <section className="timeline-section" aria-label="Protocol steps">
-      <div className="timeline-section__intro">
-        <h2>Five visible stages, from 402 to receipt</h2>
-        <CodeAside />
-      </div>
+      <TimelineIntro />
 
       <ol className="timeline">
         {STEP_ORDER.map((id, i) => {
@@ -51,12 +44,7 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
               showWait={id === "pay" && Boolean(step) && !byId.has("settled") && runState === "running"}
               payStartedAt={payStartedAt}
               displayPrice={method.price}
-              methodNote={
-                id === "settled" && (method.id === "masumi" || method.id === "masumi-usdm")
-                  ? `This payment uses Masumi escrow for ${method.price}; it does not pay the seller directly.`
-                  : undefined
-              }
-            />
+/>
           );
         })}
       </ol>
@@ -87,7 +75,6 @@ interface StepCardSlotProps {
   maxTimeoutSeconds?: number;
   showWait: boolean;
   payStartedAt: number | null;
-  methodNote?: string;
   displayPrice: string;
 }
 
@@ -102,7 +89,6 @@ function StepCardSlot({
   maxTimeoutSeconds,
   showWait,
   payStartedAt,
-  methodNote,
   displayPrice,
 }: StepCardSlotProps) {
   return (
@@ -115,7 +101,6 @@ function StepCardSlot({
         status={status}
         error={error}
         maxTimeoutSeconds={maxTimeoutSeconds}
-        methodNote={methodNote}
         displayPrice={displayPrice}
       />
       {showWait && payStartedAt !== null && (
@@ -124,5 +109,36 @@ function StepCardSlot({
         </li>
       )}
     </>
+  );
+}
+
+function TimelineIntro() {
+  return (
+    <div className="timeline-section__intro">
+      <h2>Five visible stages, from 402 to receipt</h2>
+      <details className="code-details">
+        <summary>Client code</summary>
+        <CodeAside />
+      </details>
+    </div>
+  );
+}
+
+/** Before the first payment: the five stages, so the column shows what is coming. */
+export function TimelinePreview() {
+  return (
+    <section className="timeline-section" aria-label="Protocol steps">
+      <TimelineIntro />
+      <ol className="timeline-preview">
+        {STEP_ORDER.map((id, i) => (
+          <li key={id} className="timeline-preview__item">
+            <span className="timeline-preview__index">{String(i + 1).padStart(2, "0")}</span>
+            <span className="timeline-preview__label">{STEP_COPY[id].label}</span>
+            <span className="timeline-preview__actor">{ACTORS.find((actor) => actor.id === STEP_COPY[id].actor)?.label}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="timeline-preview__hint">Connect a wallet and pay to run these steps live.</p>
+    </section>
   );
 }

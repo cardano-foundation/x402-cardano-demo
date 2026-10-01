@@ -1,0 +1,922 @@
+/* ==========================================================================
+   Masumi tab
+   ==========================================================================
+   Uses the page's tokens and shared components (intro, control panel,
+   status pills, buttons). Styled here: the money rail strip, the route
+   picker, the step list and the inspector with its data views. Scoped to
+   .masumi-tab; every colour is a :root token.
+   ========================================================================== */
+
+/* -- money rail strip ---------------------------------------------------------*/
+
+.masumi-tab .money-rail {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.masumi-tab .money-rail .rail__track {
+  padding-top: var(--space-5);
+}
+
+.masumi-tab .money-rail .rail__node {
+  position: relative;
+}
+
+.masumi-tab .money-rail__amount {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--space-1));
+  transform: translateX(-50%);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--value-line);
+  border-radius: 999px;
+  background: var(--value-soft);
+  color: var(--value);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: step-in 0.3s ease both;
+}
+
+/* Only the money holder is lit, in the money colour. */
+.masumi-tab .money-rail .rail__node[data-state="active"] {
+  border-color: var(--value);
+  background: var(--value-soft);
+}
+
+.masumi-tab .money-rail .rail__node[data-state="active"] .rail__node-label {
+  color: var(--value);
+}
+
+.masumi-tab .money-rail .rail__node[data-state="done"] {
+  border-color: var(--value-line);
+}
+
+.masumi-tab .money-rail .rail__connector[data-state="done"] .rail__connector-line {
+  border-top-color: var(--value-line);
+}
+
+.masumi-tab .rail__node[data-state="success"] .money-rail__amount {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.masumi-tab .rail__node[data-state="error"] .money-rail__amount {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/* Whoever acts in the selected step, when it is not the money holder. */
+.masumi-tab .money-rail .rail__node[data-acting="true"][data-state="idle"] {
+  border-style: dashed;
+  border-color: var(--act-line);
+}
+
+.masumi-tab .money-rail__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.masumi-tab .money-rail__state strong {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.masumi-tab .money-rail__source {
+  color: var(--value);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .money-rail__detail {
+  flex-basis: 100%;
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+}
+
+/* -- controls: agent status, route picker, job input --------------------------*/
+
+.masumi-tab .agent-down {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .agent-down strong {
+  color: var(--ink);
+}
+
+.masumi-tab .route-picker {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.masumi-tab .route-picker legend {
+  margin-bottom: var(--space-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.masumi-tab .route-picker__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.masumi-tab .route-picker__option input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--act);
+}
+
+.masumi-tab .route-picker__label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.masumi-tab .route-picker__price {
+  color: var(--value);
+}
+
+.masumi-tab .route-picker__option[data-selected="true"] {
+  border-color: var(--act);
+  background: var(--act-soft);
+}
+
+.masumi-tab .route-picker:disabled .route-picker__option {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.masumi-tab .job-input {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.masumi-tab .job-input__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.masumi-tab .job-input__hint {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.masumi-tab .job-input textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  resize: vertical;
+}
+
+.masumi-tab .masumi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.masumi-tab .masumi-actions .btn {
+  flex: 1 1 100%;
+}
+
+/* Nodes may shrink and wrap so four parties fit a narrow column. */
+.masumi-tab .money-rail .rail__node {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.masumi-tab .money-rail .rail__node-label {
+  white-space: normal;
+}
+
+.masumi-tab .money-rail .rail__connector {
+  min-width: var(--space-2);
+  margin: 0 var(--space-1);
+}
+
+/* Names only on the strip: the roles are in "About this demo" and the tooltip. */
+.masumi-tab .money-rail .rail__node-role {
+  display: none;
+}
+
+.masumi-tab .masumi-facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .masumi-facts div {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.masumi-tab .masumi-facts dt {
+  min-width: 4.5rem;
+  color: var(--ink-3);
+}
+
+.masumi-tab .masumi-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* -- steps column -------------------------------------------------------------*/
+
+.masumi-tab .masumi-run__intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.masumi-tab .masumi-run__intro h2 {
+  font-size: 1.125rem;
+}
+
+.masumi-tab .masumi-run__intro p {
+  flex-basis: 100%;
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .masumi-run__example {
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--value-line);
+  border-radius: 999px;
+  color: var(--value);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.masumi-tab .masumi-steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The page's .step-card is a two-column grid; here each item is one button. */
+.masumi-tab .masumi-steps .step-card {
+  display: block;
+  padding: 0;
+}
+
+.masumi-tab .masumi-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "index title pill"
+    "index meta  pill";
+  align-items: center;
+  gap: 0 var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.masumi-tab .masumi-step:hover {
+  border-color: var(--line);
+}
+
+.masumi-tab .step-card[data-selected="true"] .masumi-step {
+  border-color: var(--act);
+  box-shadow: inset 3px 0 0 var(--act);
+}
+
+.masumi-tab .masumi-step__index {
+  grid-area: index;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .step-card[data-status="done"] .masumi-step__index {
+  color: var(--ok);
+}
+
+.masumi-tab .step-card[data-status="active"] .masumi-step__index {
+  color: var(--act);
+}
+
+.masumi-tab .masumi-step__title {
+  grid-area: title;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.masumi-tab .step-card[data-status="pending"]:not([data-selected="true"]) .masumi-step__title {
+  color: var(--ink-2);
+}
+
+.masumi-tab .masumi-step__meta {
+  grid-area: meta;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .masumi-step .status-pill {
+  grid-area: pill;
+}
+
+/* -- inspector ----------------------------------------------------------------*/
+
+.masumi-tab .inspector {
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .inspector:focus-visible {
+  outline-offset: -2px;
+}
+
+.masumi-tab .inspector h2 {
+  font-size: 1.125rem;
+  line-height: 1.25;
+}
+
+.masumi-tab .inspector.empty {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--ink-2);
+}
+
+.masumi-tab .inspector.empty strong {
+  color: var(--ink);
+}
+
+.masumi-tab .inspector-head {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.masumi-tab .chip {
+  color: var(--act);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.masumi-tab .example-flag {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--value-line);
+  border-radius: var(--radius);
+  color: var(--value);
+}
+
+.masumi-tab .tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.masumi-tab .tabs button {
+  padding: var(--space-2) 0;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-3);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.masumi-tab .tabs button:hover {
+  color: var(--ink);
+}
+
+.masumi-tab .tabs button.on {
+  color: var(--act);
+  border-bottom-color: var(--act);
+}
+
+.masumi-tab .tab-body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.masumi-tab .lede {
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.masumi-tab .look-for {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-left: 2px solid var(--act);
+  background: var(--act-soft);
+}
+
+.masumi-tab .look-for strong {
+  color: var(--act);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .muted {
+  color: var(--ink-3);
+}
+
+.masumi-tab .small {
+  font-size: 0.75rem;
+}
+
+.masumi-tab .error {
+  color: var(--bad);
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .ext::after {
+  content: " ↗";
+}
+
+/* values: formatted, copyable */
+
+.masumi-tab .v {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .v-str,
+.masumi-tab .v-time,
+.masumi-tab .v-amount {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .v-amount {
+  color: var(--value);
+  font-weight: 600;
+}
+
+.masumi-tab .v-num,
+.masumi-tab .v-bool {
+  color: var(--act);
+}
+
+.masumi-tab .v-null {
+  color: var(--ink-3);
+}
+
+.masumi-tab .v-hash {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.masumi-tab .fake {
+  color: var(--value);
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+}
+
+.masumi-tab .copy {
+  padding: 0 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.masumi-tab .copy:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
+/* JSON tree */
+
+.masumi-tab .jt-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .jt ul {
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  border-left: 1px solid var(--line-soft);
+  list-style: none;
+}
+
+.masumi-tab .jt .jt-root {
+  padding: 0;
+  border: 0;
+}
+
+.masumi-tab .jt-leaf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem var(--space-3);
+  padding: 0.1rem var(--space-1);
+  border-radius: 4px;
+}
+
+.masumi-tab .jt-leaf:hover {
+  background: var(--bg);
+}
+
+.masumi-tab .jt-key {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .jt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.1rem var(--space-1);
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.masumi-tab .jt-toggle:hover {
+  background: var(--bg);
+}
+
+.masumi-tab .jt-caret {
+  width: 0.8rem;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .jt-meta {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+/* escrow datum */
+
+.masumi-tab .dgroup h3 {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--act);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.masumi-tab .dgroup dl {
+  margin: 0;
+}
+
+.masumi-tab .drow {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 0.8fr) minmax(0, 1.4fr);
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.masumi-tab .drow dt {
+  display: grid;
+  align-content: start;
+  gap: 0.1rem;
+}
+
+.masumi-tab .drow dt code {
+  font-size: 0.75rem;
+}
+
+.masumi-tab .drow dd {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.masumi-tab .drow small {
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.masumi-tab .by {
+  justify-self: start;
+  color: var(--ink-3);
+  font-size: 0.6875rem;
+}
+
+.masumi-tab .by-buyer {
+  color: var(--value);
+}
+
+.masumi-tab .by-seller {
+  color: var(--ok);
+}
+
+.masumi-tab .creds {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.masumi-tab .cred {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem var(--space-2);
+}
+
+.masumi-tab .cred-label {
+  min-width: 5.5rem;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+/* deadlines axis */
+
+.masumi-tab .deadlines {
+  margin: 0 0 var(--space-2);
+}
+
+.masumi-tab .axis {
+  position: relative;
+  height: 2.4rem;
+  margin: var(--space-2) var(--space-2) var(--space-3);
+}
+
+.masumi-tab .axis::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1.2rem;
+  height: 1px;
+  background: var(--line);
+}
+
+.masumi-tab .mark {
+  position: absolute;
+  top: 0.9rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-left: -0.325rem;
+  border: 1.5px solid var(--value);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.masumi-tab .mark.passed {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+.masumi-tab .now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--act);
+}
+
+.masumi-tab .now span {
+  position: absolute;
+  top: -0.25rem;
+  left: 0.3rem;
+  color: var(--act);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.masumi-tab .axis-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.masumi-tab .axis-legend li {
+  display: grid;
+}
+
+.masumi-tab .axis-legend small {
+  color: var(--ink-3);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .axis-legend li.passed {
+  opacity: 0.55;
+}
+
+/* HTTP exchange */
+
+.masumi-tab .http {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.masumi-tab .http-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .method {
+  color: var(--act);
+  font-weight: 600;
+}
+
+.masumi-tab .method.m-get {
+  color: var(--ok);
+}
+
+.masumi-tab .http-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .status {
+  padding: 0 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+}
+
+.masumi-tab .s-ok {
+  color: var(--ok);
+}
+
+.masumi-tab .s-pay {
+  color: var(--value);
+}
+
+.masumi-tab .s-warn,
+.masumi-tab .s-wait {
+  color: var(--ink-3);
+}
+
+.masumi-tab .s-err {
+  color: var(--bad);
+}
+
+.masumi-tab .http-ms {
+  color: var(--ink-3);
+}
+
+.masumi-tab .http-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.masumi-tab .http-parts.response-first {
+  flex-direction: column-reverse;
+}
+
+.masumi-tab .http-part h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.masumi-tab .http-part h4 {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--ink-3);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.masumi-tab .http-headers {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.masumi-tab .http-headers > div {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 4px;
+}
+
+.masumi-tab .http-headers dt {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .http-headers dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.masumi-tab .http-headers .mono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .x402-header {
+  border: 1px solid var(--value-line);
+  background: var(--value-soft);
+}
+
+.masumi-tab .x402-header dt {
+  color: var(--value);
+}
+
+.masumi-tab .decoded {
+  margin-top: var(--space-2);
+}
+
+.masumi-tab .decoded summary {
+  margin-bottom: var(--space-2);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.masumi-tab .code {
+  margin: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  background: var(--sunken);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+
+/* -- small screens ------------------------------------------------------------*/
+
+@media (max-width: 720px) {
+  .masumi-tab .money-rail .rail__track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-5) var(--space-2);
+  }
+
+  .masumi-tab .money-rail .rail__connector {
+    display: none;
+  }
+
+  .masumi-tab .money-rail .rail__node {
+    width: 100%;
+  }
+
+  .masumi-tab .drow,
+  .masumi-tab .http-headers > div,
+  .masumi-tab .axis-legend {
+    grid-template-columns: 1fr;
+  }
+}

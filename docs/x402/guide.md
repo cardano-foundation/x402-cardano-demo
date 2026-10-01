@@ -1,6 +1,26 @@
 # x402 for Cardano developers
 
-This guide follows the demo using the official **2.26.0** npm artifacts. It assumes familiarity with Cardano transactions, UTxOs and browser wallets. The [machine reference](reference.agent.md) collects the wire contract and exported errors; the [official Cardano specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_cardano.md) defines the protocol.
+This guide follows the demo using the official **2.26.0** npm artifacts. It is written for developers who know HTTP and JavaScript and want to learn how x402 works on Cardano. If Cardano is new to you, read the primer below first. The [machine reference](reference.agent.md) collects the wire contract and exported errors; the [official Cardano specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_cardano.md) defines the protocol.
+
+**Code map, in the order a request travels:**
+
+1. `frontend/src/x402/flow.ts`: the client's HTTP loop and recovery.
+2. `server/src/app.ts`: prices, the 402 and the payment middleware.
+3. `frontend/src/x402/cip30Signer.ts`: building and signing with the browser wallet.
+4. `facilitator/src/facilitator.ts`: verify and settle over HTTP.
+
+The Masumi agent tab's buyer code is in `frontend/src/masumi/`; its seller is the agent in `masumi/src/agent.ts`.
+
+## Cardano in two minutes
+
+- **UTxOs.** Funds are discrete unspent transaction outputs, like coins in a wallet. A transaction consumes whole inputs and creates new outputs, with change returned to the payer. Each output can be spent only once.
+- **The nonce is an input.** On account-based chains, x402 uses a random nonce in a signed authorization. On Cardano, one of the inputs the payment spends (`txHash#index`) serves as the nonce, and the ledger itself prevents reuse.
+- **Validity window.** The wallet builds the transaction so it becomes invalid after `now + maxTimeoutSeconds` (600 s here). After that it can never land, which is how an expired payment becomes final.
+- **Minimum ADA.** Every output must carry some ADA. A token payment therefore also needs ADA, on top of the token price and the fee.
+- **Lovelace.** 1 tADA = 1,000,000 lovelace. Amounts on the wire are in lovelace or in a token's base units.
+- **Confirmations.** Preprod produces a block about every 20 seconds on average. Level N means N further blocks on top of the one that includes the payment, so expect roughly (N + 1) × 20 seconds.
+- **Preprod and preview.** These are two separate public testnets with different test ADA. Wallets report both as network `0`, so the demo also checks wallet inputs against preprod before signing.
+- **CIP-30.** The standard browser-wallet API (`window.cardano.<wallet>.enable()`). The page asks the wallet for its UTxOs and for a signature; it never sees private keys.
 
 ## One request, one payment
 
@@ -40,6 +60,8 @@ The **resource server** registers `@x402/cardano/exact/server` with `x402Resourc
 
 The **facilitator** wraps `@x402/cardano/exact/facilitator`. Its provider-only signer reads chain state and submits transactions. It has no mnemonic, spends no inputs of its own, and signs nothing. The payer funds the transaction fee and every output.
 
+**Why the browser never broadcasts.** The client hands over a signed but unsubmitted transaction. That lets the server, through its facilitator, check amount, recipient, asset and timing *before* any money moves, decide when to submit, and tie that exact transaction to this request. If the client broadcast the payment itself, the server would have to find an unknown transaction on chain afterwards, and a wrong payment would already be spent.
+
 Every Cardano method in the current scheme uses the same authorization ordering:
 
 ```mermaid
@@ -66,7 +88,7 @@ The handler runs before settlement. The Express middleware withholds its respons
 
 ## Networks and assets
 
-This demo supports `cardano:preprod`. The scheme also defines `cardano:mainnet` and `cardano:preview`. These names use CAIP-2 syntax; the `cardano` namespace is not registered with CASA. The specification also defines fixed CIP-34 input aliases, which implementations should normalize before matching.
+This demo supports `cardano:preprod`. The scheme also defines `cardano:mainnet` and `cardano:preview`. These names use CAIP-2 syntax, the cross-chain `namespace:reference` format for network identifiers. The specification also defines fixed aliases for these networks (from CIP-34), which implementations should normalize before matching.
 
 CIP-30's network ID `0` covers both preprod and preview. A testnet address alone is therefore insufficient. Before signing, the adapter queries preprod for wallet inputs at every owning address, filters out spent inputs, and fails if the provider cannot establish which inputs are live. A provider error must never be treated as proof that the wallet's cached UTxOs are spendable.
 
@@ -76,7 +98,7 @@ A native-token output also needs ADA. The transaction builder computes its minim
 
 ## What verification establishes
 
-The specification has nine numbered checks. The published facilitator implements the protocol checks; the demo no longer supplies its own phase-1 validator.
+The specification has nine numbered checks. The published facilitator implements them; the demo adds none of its own. "Phase-1" below means the ledger's ordinary transaction checks (signatures, input values, fees), as opposed to running smart-contract scripts.
 
 | Rule | What it protects |
 |---|---|
@@ -116,27 +138,21 @@ An omitted policy defaults to `1`. Greater evidence satisfies a lower threshold.
 
 The facilitator waits at most `CONFIRMATION_TIMEOUT_MS`, 75000 by default, per settlement attempt. With Blockfrost, `awaitConfirmation: false` lets the official scheme own this bounded wait rather than nesting a provider wait inside it. If the evidence is insufficient, it returns `settlement_pending` with the canonical transaction ID. The official core retries settlement **once**, using identical payload and requirements.
 
-If both attempts remain pending, the browser receives HTTP 402 with a failure `PAYMENT-RESPONSE` receipt. It retains the original URL and `PAYMENT-SIGNATURE`, and performs up to three additional serial checks with a five-second delay. Transient transport failures and interrupted resource responses also trigger automatic recovery. Once those checks pause, **Check this payment again** resumes the same request without rebuilding or asking for another signature. An unreadable or mismatched receipt, or a verification rejection, stops automatic checking and preserves the payment for inspection; it is not proof that no payment occurred.
+If both attempts remain pending, the browser receives HTTP 402 with a failure `PAYMENT-RESPONSE` receipt. It retains the original URL and `PAYMENT-SIGNATURE`, and keeps checking serially, with pauses growing from five to thirty seconds, until the payment settles, expires or is rejected, for up to 20 minutes. Transient transport failures and interrupted resource responses also trigger automatic recovery. If checking pauses (an unexpected answer, or the 20 minutes run out), **Check this payment again** resumes the same request without rebuilding or asking for another signature. An unreadable or mismatched receipt, or a verification rejection, stops automatic checking and preserves the payment for inspection; it is not proof that no payment occurred.
 
 A generic `exact_cardano_settlement_failed` can also mean the provider lost its response after broadcasting. The browser keeps that payment. It permits a fresh attempt only for a matching `exact_cardano_settlement_definitively_rejected` receipt or a matching failure explicitly marked `extra.status: "expired"`. Its four-minute paid-request timeout likewise preserves the payment for checking. The bundled facilitator adds a narrow guard to expired SDK results: a fresh, bounded provider lookup must successfully report the transaction as unknown. A lookup failure or newly observed transaction keeps the receipt pending and lets the next official settlement check decide. This prevents an evidence-provider outage after TTL from being mistaken for proof that no payment landed.
 
-Keep the tab open while checking. Retry state is in browser memory, and the UI blocks switching methods, wallets or confirmation settings while a payment is uncertain. The server keeps the chosen confirmation level in the request URL, so changes to its default do not alter an existing retry.
+Keep the tab open while checking. Retry state is in browser memory, and the UI blocks switching methods, wallets, confirmation settings or tabs while a payment is in progress or uncertain. The server keeps the chosen confirmation level in the request URL, so changes to its default do not alter an existing retry.
 
 The resource server sizes each facilitator HTTP timeout above the facilitator's advertised wait. It uses at least 120000ms by default, with a 45000ms margin; an external facilitator without `/health` is assumed to use a 75000ms wait. `FACILITATOR_TIMEOUT_MS` can override this if it leaves at least a 15000ms margin. A timeout after submission is an uncertain outcome, not evidence of non-payment.
 
 ## Masumi is an escrow lock
 
-Masumi requires distinct buyer and seller payout addresses. Use a separate buyer wallet from `MASUMI_SELLER_MNEMONIC`; ordinary ADA self-payment working does not make the same setup valid for escrow. The browser checks the selected nonce input's owning address against the seller's payout address before asking for a signature. Other verification failures retain the SDK's detailed explanation in the server log.
+An ordinary payment transfers value to the receiving address. Masumi places value in its escrow smart contract (`vested_pay`), with an inline datum: the data attached to the contract output that says who may do what and when. A successful x402 receipt means the **lock settled**, not that the seller received spendable funds.
 
-An ordinary payment transfers value to the receiving address. Masumi places value in the deployed V2 `vested_pay` escrow with its required inline datum. A successful x402 receipt means the **lock settled**, not that the seller received spendable funds.
+The official resource-server scheme issues fresh requirements for each new unpaid request. It builds a request commitment, chooses a fresh seller nonce and deadlines, and has the seller sign a digest of those terms (`termsDigest`) with its wallet key, as a COSE signature. The complete issued requirements are stored and reused on the paid retry. Both the buyer and the facilitator validate the signed authorization and the derived deployment address. Masumi requires distinct buyer and seller payout addresses.
 
-The official resource-server scheme issues fresh requirements for each new unpaid request. It builds a request commitment, chooses a fresh seller nonce and deadlines, and obtains a seller COSE authorization over `termsDigest`. The complete issued requirements are stored and reused on the paid retry. The browser verifies that the quote commits to the GET URL it requested. Both the browser and facilitator validate the signed authorization and derived deployment address.
-
-The demo's seller defaults to a public test phrase, which needs no funds to authorize offers. Set `MASUMI_SELLER_MNEMONIC` only if you need a different test seller. It is a separate identity from `SERVER_CARDANO_ADDRESS`, which receives ordinary transfers. An omitted agent identifier makes no registry identity claim.
-
-The buyer uses the official helper to build the datum and collateral. For a token lock, structural ADA must cover the post-result minimum output value as well as the collateral rules. The seller does not supply a trusted collateral amount for the browser to copy.
-
-There is no release, refund, result submission or dispute implementation here. The stock Masumi Payment Service lifecycle signature flow does not accept this x402 `termsDigest` authorization as a drop-in replacement. Deposits remain governed by the contract, and the demo provides no recovery path. Use small testnet amounts and start with ordinary ADA payments.
+The **Masumi agent** tab shows this end to end with a registered agent that runs in `masumi/`. The agent issues the escrow offers and verifies and submits payments with its own built-in facilitator (not the one on port 4022). It does the job and submits the result hash on chain; after the unlock time the seller runs `npm run collect` in `masumi/`. The tab follows the money through each step. See `masumi/README.md` to run and register the agent, and `masumi/docs/FLOWS.md` for every request and transaction. The **Transactions** tab offers only ordinary payments.
 
 ## Run and inspect the demo
 
@@ -150,18 +166,16 @@ npm run dev
 
 Set `BLOCKFROST_PROJECT_ID` in the facilitator, your own `SERVER_CARDANO_ADDRESS` in the server, and `VITE_BLOCKFROST_PROJECT_ID` in the frontend. Both provider IDs must select preprod. The Vite value is public to the browser; use a dedicated demo project. Setup preserves existing `.env` files. All dependencies install from the root lockfile using `npm ci`.
 
-The UI loads `GET /demo/config` before enabling payment. That response contains the supported methods, confirmation range and default. `POST /demo/config` changes only `l1Confirmations`. The default route is `GET /api/message`; Advanced expose the token and escrow routes when supported.
+The UI loads `GET /demo/config` before enabling payment. That response contains the supported methods, confirmation range and default. `POST /demo/config` changes only `l1Confirmations`. The default route is `GET /api/message`; Advanced exposes the token route.
 
 | Route | Atomic amount | Method |
 |---|---|---|
 | `GET /api/message` | `2000000` lovelace | `default` |
 | `GET /api/message-usdm` | `100000` token units | `default` |
-| `GET /api/message-masumi` | `5000000` lovelace | `masumi` |
-| `GET /api/message-masumi-usdm` | `250000` token units | `masumi` |
 
 Start reading the implementation at `server/src/app.ts`, then `frontend/src/x402/flow.ts`. `frontend/src/x402/cip30Signer.ts` contains the browser wallet adapter; `facilitator/src/facilitator.ts` exposes the official scheme over HTTP.
 
-Run `npm run typecheck`, `npm run build`, `npm test`, `npm run test:browser` and `npm run verify:docs`. Browser tests require Playwright Chromium. Automated checks exercise all four methods through the production CIP-30 signer, HTTP facilitator and Blockfrost adapter using a local provider fixture, including pending recovery, expiry and provider failures. They do not demonstrate a real network settlement; that needs your configured provider and funded preprod wallet.
+Run `npm run typecheck`, `npm run build`, `npm test`, `npm run test:browser` and `npm run verify:docs`. Browser tests require Playwright Chromium. Automated checks exercise both payment routes through the production CIP-30 signer, HTTP facilitator and Blockfrost adapter using a local provider fixture, including pending recovery, expiry and provider failures. They do not demonstrate a real network settlement; that needs your configured provider and funded preprod wallet.
 
 For errors, read the UI's decoded protocol reason and the server log. A missing facilitator prevents configuration from loading. Stale or preview UTxOs prevent signing. Provider 402/429 responses indicate quota or rate limits. Pending or interrupted paid requests require checking the same payment, not starting a new one.
 

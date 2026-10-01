@@ -23,7 +23,6 @@ const test = base.extend<{ backend: Backend }>({
         settle: (payload, requirements) => facilitator.settle(payload, requirements),
       },
       payTo: seller.sellerAddress,
-      masumiSeller: seller,
     });
     const listener = app.listen(44021, "127.0.0.1");
     await new Promise<void>((resolve, reject) => {
@@ -99,7 +98,7 @@ test("ADA is the default with Advanced collapsed on desktop and mobile", async (
   await openDemo(page, backend);
   await expect(page.getByRole("button", { name: "Pay 2 tADA" })).toBeDisabled();
   await expect(page.locator("details.advanced-options")).not.toHaveAttribute("open");
-  await expect(page.locator('input[type="radio"]')).toHaveCount(4);
+  await expect(page.locator('input[type="radio"]')).toHaveCount(2);
   await expect(page.locator('input[type="radio"]').first()).not.toBeVisible();
   await expect(page.getByText("Default", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -131,25 +130,35 @@ for (const mode of ["mainnet", "reject"] as const) {
   });
 }
 
-test("pending settlement locks controls and resumes the identical signed payment", async ({ page, backend }) => {
+// Changed 2026-10-01 with the user's decision "keep checking until done": a
+// pending payment no longer pauses after three checks; the page keeps checking
+// the identical signed payment and finishes step 05 on its own.
+test("pending settlement locks controls and finishes by itself with the identical signed payment", async ({ page, backend }) => {
+  test.setTimeout(150_000);
   backend.state.confirmations = -1;
   await openDemo(page, backend);
   await connect(page);
+  const pending = page.waitForResponse(response => response.status() === 402 && !!response.headers()["payment-response"]);
   await page.getByRole("button", { name: "Pay 2 tADA" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
+  await pending;
   await expectLockedPayment(page);
-  await expect(page.locator(".timeline > li.step-card").last()).toContainText("Check needed");
-  await expect(page.getByText(/Automatic checks paused/)).toBeVisible();
+  await expect(page.locator(".timeline > li.step-card").last()).toContainText("In progress");
+  await expect(page.getByRole("button", { name: "Check this payment again" })).toHaveCount(0);
+  await expect(page.getByText("Settlement needs another check", { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })))).toBe(true);
   expect(backend.state.builds).toBe(1);
   expect(backend.state.broadcasts).toBe(1);
+  // Past the old limit of three automatic checks the page is still checking, not paused.
+  await expect.poll(() => backend.paymentHeaders.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(5);
+  await expect(page.getByRole("button", { name: "Check this payment again" })).toHaveCount(0);
+  await expect(page.locator(".timeline > li.step-card").last()).toContainText("In progress");
+  const sent = backend.paymentHeaders.length;
   backend.state.confirmations = 1;
-  await page.getByRole("button", { name: "Check this payment again" }).click();
-  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible({ timeout: 45_000 });
   expect(await page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })))).toBe(false);
   expect(backend.state.builds).toBe(1);
   expect(backend.state.broadcasts).toBe(1);
-  expect(backend.paymentHeaders).toHaveLength(5);
+  expect(backend.paymentHeaders).toHaveLength(sent + 1);
   expect(new Set(backend.paymentHeaders).size).toBe(1);
   await expect(page.locator(".timeline > li.step-card")).toHaveCount(5);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -180,23 +189,6 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
-test("pending escrow does not claim that funds are already confirmed in the lock", async ({ page, backend }) => {
-  backend.state.confirmations = -1;
-  await openDemo(page, backend);
-  await connect(page);
-  await page.getByText("Advanced", { exact: true }).click();
-  await page.getByRole("radio", { name: "Masumi escrow 5 tADA" }).check();
-  await page.getByRole("button", { name: "Lock 5 tADA in escrow" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
-  await expect(page.getByText(/is confirmed in the Masumi escrow lock|This payment uses Masumi escrow/)).toHaveCount(0);
-  backend.state.confirmations = 1;
-  await page.getByRole("button", { name: "Check this payment again" }).click();
-  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible();
-  expect(backend.state.builds).toBe(1);
-  expect(backend.state.broadcasts).toBe(1);
-  await expect(page.getByText(/This payment uses Masumi escrow/)).toBeVisible();
-});
-
 test("mempool-only acceptance is visibly distinct from on-chain confirmation", async ({ page, backend }) => {
   backend.state.confirmations = -1;
   await openDemo(page, backend);
@@ -213,19 +205,24 @@ test("mempool-only acceptance is visibly distinct from on-chain confirmation", a
   expect(backend.state.broadcasts).toBe(1);
 });
 
+// Changed 2026-10-01 with the user's decision "keep checking until done":
+// pending no longer pauses by itself, so the rejection now arrives on one of
+// the automatic checks instead of after a manual "Check this payment again".
 test("a rejected check explains the verification error and preserves recovery", async ({ page, backend }) => {
   backend.state.confirmations = -1;
-  await openDemo(page, backend);
-  await connect(page);
-  await page.getByRole("button", { name: "Pay 2 tADA" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
   // A verifier rejection (for example after a server restart) must still be
   // explained without discarding a transaction that may already be submitted.
-  let rejectCheck = true;
+  let rejectCheck = false;
   await page.route("**/api/message?*", route => rejectCheck
     ? route.fulfill({ status: 402, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "PAYMENT-REQUIRED", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: route.request().url() }, error: "invalid_exact_cardano_payload_nonce_not_on_chain", accepts: [] }) }, body: "{}" })
     : route.continue());
-  await page.getByRole("button", { name: "Check this payment again" }).click();
+  await openDemo(page, backend);
+  await connect(page);
+  const pending = page.waitForResponse(response => response.status() === 402 && !!response.headers()["payment-response"]);
+  await page.getByRole("button", { name: "Pay 2 tADA" }).click();
+  await pending;
+  rejectCheck = true;
+  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
   await expect(page.getByText(/The server rejected this payment check:.*nonce_not_on_chain/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Start a new payment" })).toHaveCount(0);
   rejectCheck = false;
@@ -241,8 +238,6 @@ test("a rejected check explains the verification error and preserves recovery", 
 for (const method of [
   { radio: "ADA payment 2 tADA", button: "Pay 2 tADA" },
   { radio: "Native token 0.10 tUSDM", button: "Pay 0.10 tUSDM" },
-  { radio: "Masumi escrow 5 tADA", button: "Lock 5 tADA in escrow" },
-  { radio: "Masumi with token 0.25 tUSDM", button: "Lock 0.25 tUSDM in escrow" },
 ]) {
   test(`${method.radio} automatically reaches receipt and resource with one signature`, async ({ page, backend }) => {
     backend.state.confirmations = -1;
