@@ -76,6 +76,7 @@ export function lockMismatch(utxo: EscrowUtxo, job: ExpectedLock): string | null
   ];
   const failed = checks.find(([ok]) => !ok);
   if (failed) return `datum field ${failed[1]} differs from the signed terms`;
+  // For a lovelace price, the collateral the buyer gets back is not payment.
   const unit = unitKey(job.unit);
   const paid = unit === "" ? utxo.lovelace - d.collateralReturnLovelace : utxo.tokens[unit] ?? 0n;
   return paid >= job.amount ? null : "underpaid";

@@ -9,7 +9,15 @@
  * Every transaction is evaluated during build() (Blockfrost), so a script
  * failure throws before anything is signed, and transactions run one at a time
  * so they never compete for the seller's inputs. The rules below were checked
- * against the real validators with `aiken tx simulate`; see docs/DEVELOPER.md.
+ * against the real validators with `aiken tx simulate`; see docs/DEVELOPER.md
+ * and docs/FLOWS.md (each transaction's anatomy).
+ *
+ * Cardano in one paragraph, for readers new to it: money sits in UTxOs
+ * (unspent transaction outputs). A transaction spends some UTxOs and creates
+ * new ones. A UTxO locked at a script address can only be spent if the script
+ * (here Masumi's vested_pay validator) approves, given a redeemer (the action
+ * requested) and the UTxO's datum (the state stored with it). Validity bounds
+ * give the script a trusted time window, since scripts cannot read a clock.
  */
 import { readFileSync } from "node:fs";
 import {
@@ -49,6 +57,11 @@ export const scriptHash = (script: PlutusV3.PlutusV3) => ScriptHash.toHex(Script
 // ---------------------------------------------------------------- time
 
 const SLOT = SlotConfig.SLOT_CONFIG_NETWORK.Preprod;
+/**
+ * vested_pay's cooldown_period (420 000 ms on preprod). After an action, the
+ * acting party must wait this long before acting again; SubmitResult sets
+ * seller_cooldown_time to (validity upper bound + cooldown).
+ */
 const COOLDOWN_MS = BigInt(MASUMI_DEFAULT_DEPLOYMENT.cooldownPeriod);
 /** The POSIX time the ledger shows scripts for a validity bound: the start of its slot. */
 export const slotStartMs = (ms: bigint) => Time.slotToUnixTime(Time.unixTimeToSlot(ms, SLOT), SLOT);
@@ -57,7 +70,18 @@ export const ceilToSlotMs = (ms: bigint) => slotStartMs(ms) === ms ? ms : slotSt
 
 // ---------------------------------------------------------------- helpers
 
-const REDEEMER = { submitResult: Data.constr(5n, []), withdraw: Data.constr(0n, []), mint: Data.constr(0n, []), burn: Data.constr(2n, []) };
+/**
+ * Redeemers are constructor indices of each validator's Action type:
+ *   vested_pay (payment-v2): Withdraw 0, SetRefundRequested 1, AuthorizeWithdrawal 2,
+ *                            WithdrawRefund 3, WithdrawDisputed 4, SubmitResult 5, AuthorizeRefund 6
+ *   registry (mint policy):  MintAction 0, UpdateAction 1, BurnAction 2
+ */
+const REDEEMER = {
+  submitResult: Data.constr(5n, []), // vested_pay SubmitResult
+  withdraw: Data.constr(0n, []),     // vested_pay Withdraw
+  mint: Data.constr(0n, []),         // registry MintAction
+  burn: Data.constr(2n, []),         // registry BurnAction
+};
 const txHashOf = (u: UTxO.UTxO) => TransactionHash.toHex(u.transactionId);
 const refOf = (u: { txHash: string; outputIndex: number }) => `${u.txHash}#${u.outputIndex}`;
 
@@ -168,7 +192,14 @@ export function createChain(config: { blockfrost: Blockfrost; mnemonic: string; 
     return lock.raw as UTxO.UTxO;
   };
 
-  /** Mints the registry NFT to the exact seller address, with label-721 metadata. */
+  /**
+   * Registry mint. Anatomy:
+   *   inputs     a seed UTxO of the seller, pure ADA if possible (its out-ref makes the asset name unique)
+   *   mint       +1 of policy 67ab0c92… with name 10 ‖ blake2b_224(seed ref) ‖ 000000, redeemer MintAction
+   *   outputs    the NFT (+ min-UTxO ADA) to the exact seller address; change to the seller
+   *   metadata   label 721: { <policy>: { <assetName>: <V2 agent metadata> }, version: "1" }
+   *   signers    the seller (mirrors the Payment Service's registration)
+   */
   const register = (metadata: Record<string, unknown>) => serial(async () => {
     const wallet = await checkWallet();
     const seed = wallet.find(u => !Assets.hasMultiAsset(u.assets)) ?? wallet[0];
@@ -186,7 +217,7 @@ export function createChain(config: { blockfrost: Blockfrost; mnemonic: string; 
     return { txHash: await signSubmitAwait(built), agentIdentifier: REGISTRY_POLICY_ID + assetName };
   });
 
-  /** Burns the registry NFT held by the seller. */
+  /** Registry burn: spend the UTxO holding the NFT and mint −1 with redeemer BurnAction. */
   const deregister = (agentIdentifier: string) => serial(async () => {
     const wallet = await checkWallet();
     const holder = (await client.getWalletUtxos()).find(u => Assets.getByUnit(u.assets, agentIdentifier) === 1n);
@@ -204,8 +235,17 @@ export function createChain(config: { blockfrost: Blockfrost; mnemonic: string; 
    * SubmitResult: continue the lock at its own address with identical native
    * assets (lovelace may grow for min-UTxO) and a datum that differs only in
    * result_hash, seller_cooldown_time and state.
+   *
+   * Anatomy:
+   *   inputs     the escrow UTxO (redeemer SubmitResult) + seller UTxOs for the fee
+   *   outputs    exactly one continuing output at the escrow: same tokens, lovelace ≥ input,
+   *              inline datum with result_hash set, seller_cooldown_time ≥ upper + cooldown,
+   *              buyer_cooldown_time 0, state ResultSubmitted (1)
+   *   validity   finite lower bound ≥ current seller cooldown; upper bound whose slot start
+   *              is before submit_result_time
+   *   signers    the seller (the datum's seller key); collateral from the seller's wallet
    */
-  const submitResult = (lock: EscrowUtxo, resultHashHex: string, onSubmitted?: (txHash: string) => void) => serial(async () => {
+  const submitResult = (lock: EscrowUtxo, resultHashHex: string, onSubmitted?: (sent: { txHash: string; sellerCooldownTime: bigint }) => void) => serial(async () => {
     const utxo = rawOf(lock);
     const d = lock.datum;
     if (!d || !(utxo.datumOption instanceof InlineDatum.InlineDatum)) throw new Error(`${refOf(lock)} has no vested_pay datum.`);
@@ -230,10 +270,20 @@ export function createChain(config: { blockfrost: Blockfrost; mnemonic: string; 
       .addSigner({ keyHash: KeyHash.fromHex(sellerVkh) })
       .setValidity({ from, to })
       .build({ changeAddress: seller, availableUtxos: wallet });
-    return signSubmitAwait(built, onSubmitted);
+    return signSubmitAwait(built, txHash => onSubmitted?.({ txHash, sellerCooldownTime: sellerCooldown }));
   });
 
-  /** Withdraw: one escrow per transaction; the buyer's collateral return goes back tagged with the lock's out-ref. */
+  /**
+   * Withdraw: one escrow per transaction; the buyer's collateral return goes back tagged with the lock's out-ref.
+   *
+   * Anatomy:
+   *   inputs     the ResultSubmitted escrow UTxO (redeemer Withdraw) + seller UTxOs for the fee
+   *   outputs    no output back to the escrow; if collateral_return_lovelace > 0, an output to
+   *              buyer_return_address (or buyer) with ≥ that amount and an inline datum equal to
+   *              the spent UTxO's OutputReference; everything else returns to the seller as change
+   *   validity   lower bound rounded up to a slot ≥ unlock_time; any finite upper bound
+   *   signers    the seller; collateral from the seller's wallet
+   */
   const withdraw = (utxo: UTxO.UTxO, d: MasumiDatumView) => serial(async () => {
     const now = await tipMs(); // per transaction: earlier withdrawals in this run took time to confirm
     const from = ceilToSlotMs(d.unlockTime);

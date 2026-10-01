@@ -93,8 +93,18 @@ export const resultHash = (identifierFromPurchaser: string, output: string) =>
 
 // ---------------------------------------------------------------- standard path
 
-/** Deadline offsets for standard-path jobs (ms after `start_job`). */
-export const STANDARD_DEADLINES = { payBy: 15 * 60_000, submitResult: 40 * 60_000, unlock: 60 * 60_000, externalDisputeUnlock: 80 * 60_000 };
+/**
+ * Deadline offsets for standard-path jobs (ms after `start_job`). They satisfy
+ * the Payment Service's `/purchase` rules (purchases/shared.ts): pay-by at
+ * least 5 min before submit-result; submit-result at least 15 min in the
+ * future and 15 min before unlock; dispute at least 15 min after unlock.
+ */
+export const STANDARD_DEADLINES = {
+  payBy: 15 * 60_000,                // the buyer's node must lock within 15 min
+  submitResult: 40 * 60_000,         // the agent must put the result hash on chain within 40 min
+  unlock: 60 * 60_000,               // the seller may withdraw from 60 min
+  externalDisputeUnlock: 80 * 60_000, // the dispute window closes at 80 min
+};
 
 /** CIP-8 `signData(address, payloadHex)`, e.g. `toMasumiSellerSigner(...).signTerms`. */
 export type Signer = (address: string, payloadHex: string) => Promise<{ key: string; signature: string }> | { key: string; signature: string };
@@ -143,19 +153,19 @@ export async function standardTerms(input: {
   // Every key and value matters: the buyer node rebuilds this object and
   // verifies the signature over it. See test/standard-path.test.ts.
   const payload = {
-    inputHash: hash,
-    agentIdentifier: input.agentIdentifier,
-    purchaserIdentifier: input.identifierFromPurchaser,
-    sellerIdentifier,
-    RequestedFunds: null,
-    payByTime: String(times.payByTime),
+    inputHash: hash,                                  // MIP-004 hash of the job input
+    agentIdentifier: input.agentIdentifier,           // registry NFT (policy ++ asset name)
+    purchaserIdentifier: input.identifierFromPurchaser, // the buyer's nonce, echoed
+    sellerIdentifier,                                 // our nonce ++ agent id; the nonce becomes the datum's seller_nonce
+    RequestedFunds: null,                             // null for Fixed pricing (the price is in the registry)
+    payByTime: String(times.payByTime),               // times are signed as decimal strings, not numbers
     submitResultTime: String(times.submitResultTime),
     unlockTime: String(times.unlockTime),
     externalDisputeUnlockTime: String(times.externalDisputeUnlockTime),
-    sellerAddress: input.sellerAddress,
-    sellerReturnAddress: null,
-    smartContractAddress: ESCROW_ADDRESS,
-    supportedPaymentSourceIndex,
+    sellerAddress: input.sellerAddress,               // must equal the NFT holder's bech32 exactly
+    sellerReturnAddress: null,                        // the buyer's node has no hot wallet for us
+    smartContractAddress: ESCROW_ADDRESS,             // the V2 escrow; also the identifier's 5th segment
+    supportedPaymentSourceIndex,                      // a number: Sokosumi always forwards the resolved index
   };
   const { key, signature } = await input.sign(input.sellerAddress, sha256(stringify(payload)));
   const identifier = [sellerIdentifier, input.identifierFromPurchaser, signature, key, ESCROW_ADDRESS].join(".");

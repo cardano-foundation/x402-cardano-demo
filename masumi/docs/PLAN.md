@@ -399,3 +399,136 @@ It never retries the create call (a retry would be a second paid job) and return
 **Most likely wrong**
 1. Name-based lookup. `GET /agents` exposes no registry id, so matching `AGENT_NAME` could hit someone else's agent with the same name. Mitigation: exact and unique match, or set `SOKOSUMI_AGENT_ID`, which the UI shows after the first lookup. Sokosumi may also show a metadata-override name that differs from `AGENT_NAME`; then set `SOKOSUMI_AGENT_ID`.
 2. Response shapes are read from Sokosumi's source at `8327114`, not from the live preprod API. The client parses defensively and reports unexpected shapes.
+
+---
+
+## Addendum C — educational UI for developers (2026-09-30)
+
+**Goal.** The UI teaches the Masumi + x402 flow to developers. Each step says who acts, what happens and why, and shows the **real data** behind it. A live escrow state strip shows where the money is. All three hire paths (registered tUSDM x402, unlisted tADA x402, Sokosumi) keep working unchanged.
+
+**Decisions (user):** the audience is developers; the layout is a guided flow on the left plus a live inspector on the right.
+
+**Design**
+
+| Change | Where | Risk |
+|---|---|---|
+| **Actors legend**: Buyer, Agent (seller), Facilitator (inside the agent), Masumi escrow, Registry, Sokosumi, each with one line of explanation | `ui/App.tsx` | Low |
+| **Step model**: `{ id, title, actor, explain, status, data?, links? }`. The flows emit step events; clicking a step shows its `data` in the inspector | `ui/steps.ts` (new) | Low |
+| **x402 steps and the data each one shows**: (1) request → decoded `PAYMENT-REQUIRED` (price, `payTo` escrow, `extra.terms`, `inputCommitment`); (2) verify offer → seller-signature/`termsDigest` result, commitment == our job, registry check result (or "skipped: unlisted"); (3) wallet signs lock → tx hash, escrow output value, **decoded datum** (19 fields, via `parseMasumiLockDatum`), validity to `payByTime`; (4) settle → the `PAYMENT-SIGNATURE` payload (truncated). The paid POST's response is captured **asynchronously**: `http.getPaymentSettleResponse()` decodes the `PAYMENT-RESPONSE` receipt and the job body, and fills step 4 whenever it arrives. It is independent of the polling, and shows "no response; following the transaction by hash" if the connection drops; (5) lock found → the agent's view of the lock (ref, value, datum, state `FundsLocked`); (6) result submitted → result tx, MIP-004 result hash and the seller cooldown the agent set. It is labelled **"SubmitResult sent (awaiting confirmation)"**, because the agent reports acceptance by the node, not an on-chain read; (7) collect → unlock time countdown and `npm run collect` | `ui/x402Flow.ts` (new; the flow moved out of App with **injected dependencies**: `api(path, init)`, `createSigner`, `sleep`, `now`, `emit`), `ui/cip30Signer.ts` (reports `termsDigest`, the registry check (called, or skipped for unlisted) and the built lock datum through callbacks) | Medium |
+| **Sokosumi steps**: hire (API request and response via the proxy) → Sokosumi calls `start_job` (explained; standard-path terms) → payment node locks tUSDM (`payment_pending`) → agent works (`processing`) → result delivered (`completed`) | `ui/sokosumiFlow.ts` (new) | Low |
+| **Inspector**: the datum as a 19-row table (field, value, who set it, meaning), pretty JSON with bigints as strings (values in full; developers need them exact), explorer links, and a "What to look for" line per step | `ui/Inspector.tsx` (new) | Low |
+| **Escrow state strip**: Offer → FundsLocked → ResultSubmitted → Collectable → Withdrawn. Each state shows its **source**. *Observed* comes from the agent's job view (FundsLocked; ResultSubmitted as "sent"). *Derived* comes from time (Collectable = now ≥ `unlockTime`, with a countdown). *Not observed* is Withdrawn, done by `npm run collect` outside the UI. On the Sokosumi path the whole strip is marked *inferred from Sokosumi's job status*. A note says refund and dispute branches exist (see DEVELOPER.md) | `ui/EscrowStates.tsx` (new) | Low |
+| **Agent (read-only addition)**: the `Job` type and `view()` move to a pure module. `advance()` stores `lock: { ref, lovelace, tokens, datum }`, excluding the raw UTxO, plus `resultHash` and `sellerCooldownTime`. `chain.submitResult`'s `onSubmitted` reports `{ txHash, sellerCooldownTime }`. The view converts all bigints to strings. No behaviour change | `src/jobView.ts` (new), `agent.ts`, `chain.ts` | Low |
+| Styles: two-column layout (the inspector is sticky on desktop and stacks below on mobile), code panes, visible focus, reduced motion | `ui/styles.css` | Low |
+
+**Acceptance**
+- D1: typecheck, all tests and the build pass. `test/steps.test.ts` checks the pure helpers: bigint formatting, the datum view → display rows (all 19 fields labelled) and step patching.
+- D2: `test/x402Flow.test.ts` drives the **real flow module** with a fake `api`, a stub signer and an instant `sleep`/`now`. It covers:
+  - the offer filter picks only the chosen asset and price;
+  - a rejected paid POST ends the flow with its error;
+  - `completed` ends with the result and `failed` with the job error;
+  - no job by `payByTime + 120 s` ends with the "never recorded" message;
+  - step 4 fills from the receipt when it arrives, independently of polling.
+
+  Against a running agent with a fake Sokosumi, the Sokosumi flow runs to "Result delivered".
+- D3: `test/jobView.test.ts` builds a job with a **real** `parseMasumiLockDatum` output plus a raw-UTxO-like object. It checks that `JSON.stringify(view(job))` succeeds, that no bigint survives anywhere (bigint fields become decimal strings), that `lock.datum` and `resultHash` are present, and that no `raw` key exists.
+- D4 (manual): page rendering and a visual check in a browser, in light and dark mode and at mobile width. If no browser automation is available, this stays unverified and I'll say so.
+
+The Sokosumi inspector shows the **proxy's cut-down job** (`id`, `status`, `result`, `name`), labelled as such, not Sokosumi's raw envelope.
+
+**Non-goals.** No change to payment logic, security checks or the hire paths. No new dependencies.
+
+**Most likely wrong**
+1. Showing the Sokosumi path's hidden middle steps (start_job, lock) only as explanations, without live data: the UI can't see Sokosumi's side. Acceptable, and labelled as "happens inside Sokosumi".
+2. Moving the flow logic out of `App.tsx` risks regressions in the x402 path that only a real wallet would reveal. Mitigation: the flow module keeps the same calls in the same order. The paid POST's `.then` now also decodes the receipt, which is a small change and covered by D2. D2 tests the behaviours a move could break.
+
+---
+
+## Addendum D — polished, interactive UI and formatted data (2026-09-30)
+
+**Goal.** A polished, interactive explorer with well-formatted data, keeping all the detail of Addendum C. No change to the flows, the agent or the payment logic.
+
+**Design**
+
+| Change | Where | Risk |
+|---|---|---|
+| **Formatting helpers (pure, tested)**. `kindOf(key, value, parent)` also treats the children of `tokens` as amounts, with the key as the asset. `validTo` counts as a time. `resultHash`, `inputHash`, `termsDigest` and credential hashes are hex (no explorer link). Only tx and UTxO values get tx links. Times: POSIX ms → `30 Sep 2026, 10:32:05 UTC` plus relative time (`in 18 min`, `12 min ago`). Amounts: lovelace → `5.00 tADA`, and tUSDM base units → `1.00 tUSDM`, with the raw value kept. `shortMiddle(hex)`. `kindOf` classifies values as time, lovelace, token amount, tx hash, UTxO, address, hex or plain | `ui/format.ts` (new) | Low |
+| **Value renderer**: formats by kind. It reads an `example` flag from a React context and renders **no explorer links** in example mode. Hashes and addresses get a middle ellipsis, a copy button and an explorer link (tx and address); times get a relative hint; the raw value is always available on hover or click | `ui/Value.tsx` (new) | Low |
+| **JSON tree**: collapsible objects and arrays, coloured keys, values through the Value renderer, "copy JSON" | `ui/JsonTree.tsx` (new) | Low |
+| **Inspector with tabs**: *Explain* (what, why, what to look for, links), *Datum* (grouped as Parties / Signed terms / Result / Deadlines / State, plus a **deadline axis** with pay-by, submit, unlock, dispute and a now marker), *Raw* (JSON tree). A tab is shown only when there is data for it | `ui/Inspector.tsx`, `ui/Deadlines.tsx` (new) | Low |
+| **Flow diagram hero**, replacing the cast cards and the state strip. The node set **depends on the path**: x402 has the buyer, facilitator, escrow, agent and registry; Sokosumi has Sokosumi, escrow and agent. A token shows where the money is:
+- in the wallet (idle or offer);
+- in the escrow, locked;
+- in the escrow, with the result *reported by the agent* (not confirmed on chain);
+- collectable (derived from time).
+
+It **never moves to the seller**: Withdrawn stays outlined as "not observed". Any failure after settle started puts the token in an **"unknown, check the explorer"** state (funds may be in escrow). On Sokosumi every state is labelled inferred. Each state keeps its source label (observed, derived, not observed). Hovering or focusing a node shows its role, and the active step's actor node is highlighted | `ui/FlowDiagram.tsx` (new, replaces `EscrowStates.tsx`) | Low |
+| **Layout**: a top bar with a network pill and an "agent reachable (local)" indicator (from `/availability`; not the registry's Online status), the hero, then three columns: controls, timeline, inspector (sticky). It stacks on mobile. The timeline shows the chosen path's steps **before** running (pending), with a connecting line, actor colour chips and elapsed time per step. Arrow keys ↑/↓ move between steps | `ui/App.tsx`, `ui/styles.css` | Low |
+| **Replay an example purchase**: runs the **real `runX402` flow module** against a simulated agent and a simulated wallet in the browser, injected through the flow's existing dependencies. It uses a library-encoded 402 and a datum built and parsed with `@x402/cardano`, with obviously fake repeated-pattern hashes. It needs no agent config and no wallet (it carries its own offer).
+- Labelled "Example run: simulated agent and wallet; no money moves" on the hero, the timeline and the inspector (a `Step`-level `example` flag).
+- No explorer links, via the example context.
+- **Run coordinator** (`ui/runs.ts`, pure). Each run, real or replay, gets a token with an `AbortSignal` and a `guard(fn)`. **Every** state write of a run goes through `guard`: steps, escrow token, error, busy flags, the example flag. Starting any run aborts the previous one. The replay's simulated `sleep`/`api` reject once aborted, and stale rejections are ignored. The replay's busy state is separate from a real run's `running`: during a replay the Pay button stays usable, and pressing it cancels the replay. The Replay button is disabled while a real run is going.
+- In the example, the verify step notes that the simulated wallet reports the checks as passed | `ui/example.ts` (new), `ui/runs.ts` (new), `ui/App.tsx` | Low |
+| Motion only on state changes (the token move, the step transitions), respecting `prefers-reduced-motion`. Light and dark mode. No new dependencies | `ui/styles.css` | Low |
+
+**Acceptance**
+- E1: `test/format.test.ts` passes. It covers UTC date formatting, relative time in both directions, lovelace and tUSDM formatting and `shortMiddle`. `kindOf` is tested on the **real shapes**:
+  - a `lock.tokens` entry;
+  - `accepts[].amount` with a dotted `asset`;
+  - `output.amount`;
+  - `receipt.transaction` counts as tx;
+  - `resultHash`, `inputHash`, `termsDigest` and `payment.hash` are not tx;
+  - `maxTimeoutSeconds` is not a time;
+  - `validTo` is a time;
+  - `"0"` reads "not set".
+- E2: `test/example.test.ts` runs the example's simulated dependencies through the real `runX402` with an instant sleep. The run completes, every step ends done (collect active), each step has data, and the sign step's datum is a library-parsed `MasumiDatumView`. Because the example is the real flow module, its shapes can't drift.
+- E2b: `test/runs.test.ts` starts a replay, then a real run, and lets the replay's dependencies finish. The replay's guarded writes are dropped and its simulated `sleep` rejects after the abort, so steps, escrow, error and busy all still belong to the real run.
+- E3: typecheck, all tests and the build pass, including the standalone copy.
+- E4 (visual): Playwright's Chromium is run with `npx` from the repo root's existing `@playwright/test` (not added to `masumi/package.json`), with a scratchpad script. It captures the idle page with the agent running, and a replayed example with a step selected on each inspector tab, in light and dark mode, at desktop and 390 px width. The script asserts that there is no horizontal overflow at 390 px (`scrollWidth <= innerWidth`) and that the example shows **zero** `a[href*="cardanoscan"]`. I review the screenshots myself. The replay also works with Vite alone, with no agent (the idle page then shows "agent not reachable" and the replay button).
+- E5: the real x402 and Sokosumi flows are unchanged. `x402Flow`/`sokosumiFlow` are not edited, and their tests still pass.
+
+**Non-goals.** No new payment features; no change to `src/*.ts` outside `ui/`.
+
+**Most likely wrong**
+1. The replay drifting from the real flow. Mitigation: the replay **is** the real `runX402` module with simulated dependencies (E2).
+2. The hero diagram becoming decoration. Mitigation: every node and state in it maps to real flow state, and nothing is shown that the flow doesn't know.
+
+---
+
+## Addendum E — show the HTTP exchanges (2026-09-30)
+
+**Goal.** Make it obvious that x402 and MIP-003 happen over HTTP. Every step that makes HTTP calls shows them the way a browser's network panel would. Also: a quieter header, where the big hero is replaced by a slim title bar and a "where the money is" pipeline (user feedback: "too childish"; keep the graph).
+
+| Change | Where | Risk |
+|---|---|---|
+| **Recorder** (pure): `recordingApi(api, onExchange)` wraps the flows' injected `api`. It records method, path, request headers and body, status, the relevant response headers (`content-type`, `PAYMENT-REQUIRED`, `PAYMENT-RESPONSE`) and the body (read from a clone), plus time and duration. The response returned to the flow is untouched. Each request is reported **twice**: pending when sent, then answered (same id). The HTTP tab shows POSTs as "pending…" while in flight, so the paid request is visible while the facilitator settles. `stepOf` maps requests by kind (`/x402/start_job*` without or with `PAYMENT-SIGNATURE` → `request`/`settle`, `POST /sokosumi/hire` → `hire`) and polls by the status they report (`/jobs/by-tx`: completed → `result`, else `lock`; `/sokosumi/jobs`: via `sokosumiStage` → `pay`/`work`/`done`). Each step keeps only the count, the first and the latest exchange. The request line shows the URL the browser really requests (`/api/...`). `decodeX402Headers()` decodes the three x402 headers with `@x402/core/http` | `ui/http.ts` (new) | Low |
+| **HTTP tab** (first tab when the step has exchanges): request line, status pill (`402 Payment Required`, `200 OK`), header tables with x402 headers shown encoded (truncated) and decoded, bodies as the formatted JSON tree. Polling steps show "polled N×", with the latest exchange shown | `ui/HttpExchange.tsx` (new), `ui/Inspector.tsx` | Low |
+| App: wraps `api` for real runs and the example, and stores exchanges per step (guarded by the run token) | `ui/App.tsx` | Low |
+| Header: slim title bar plus a pipeline (stations, line filled up to the money, amount tag); no hero | `ui/FlowDiagram.tsx`, `ui/styles.css` | Low |
+
+**Acceptance**
+- F1: `test/http.test.ts` passes. The recorder returns the original response (the body is still readable) and captures status, headers and body. A request still in flight is reported as pending, carrying `PAYMENT-SIGNATURE`, then replaced with the same id. `stepOf` maps requests by kind and polls by their reported status, including all Sokosumi stages. The x402 headers decode.
+- F2: the example replay shows HTTP tabs for request (402 with a decoded `PAYMENT-REQUIRED`), settle (200 with a decoded `PAYMENT-RESPONSE` and the request's `PAYMENT-SIGNATURE`) and lock (polls). Checked with Playwright screenshots in light and dark mode, with zero cardanoscan links and no horizontal overflow at 390 px.
+- F3: typecheck, all tests and the build pass; the flow modules are unchanged.
+
+---
+
+## Addendum F — Sokosumi collect step, code as teaching material, flow documentation (2026-09-30)
+
+**Goal.**
+1. The Sokosumi path ends like the x402 path: a final agent-driven "Seller collects after the unlock time" step, checked once the job is completed.
+2. A readability pass over `masumi/src` so the code works as teaching material: module headers that say what the file teaches, comments on every protocol decision (why, with the spec or upstream reference), consistent naming, and dead code removed. **No behaviour change.** The guard has two parts:
+- **Tested modules**: the tests guard them, and no existing test is edited.
+- **Untested modules** (`agent.ts`, the `chain.ts` transaction builders, `ui/cip30Signer.ts`, `config.ts`, `scripts/*`, all `.tsx` and CSS): comments and formatting only. Any other edit there is listed in the review brief with its equivalence argument.
+
+Nothing that crosses a boundary is renamed: HTTP paths, request and response JSON fields, header names, env vars, npm scripts, exported symbols, datum and redeemer construction, proxy job fields, and CSS classes used from TSX. Code is removed as dead only after a repo-wide grep (src, test, scripts, docs).
+3. `docs/FLOWS.md`: an end-to-end reference in which **every example block names its source** (function or file). Examples taken from the replay are labelled simulated. Time rules come from `STANDARD_DEADLINES` and the watcher margins, not from the replay's simulated times. It has a sequence diagram per flow (registration, x402 purchase, Sokosumi purchase, SubmitResult, collect). It shows every HTTP exchange with example request and response lines, headers and bodies, including decoded `PAYMENT-REQUIRED`/`PAYMENT-SIGNATURE`/`PAYMENT-RESPONSE` and the MIP-003 bodies. It covers what each party verifies, and how each transaction is built (inputs, outputs, datum, redeemer, validity, signers, collateral, metadata) for the lock, the registry mint and burn, SubmitResult and Withdraw, with the rules each one must satisfy.
+
+**Acceptance**
+- G1: `test/sokosumiFlow.test.ts` (fake proxy) passes: a completed job ends with every step, including `collect` (actor agent), marked done, and a `failed` job fails the active step.
+- G1 also asserts that `collect` is the **last** step. The collect text moves out of the `done` step. The step shows no `unlockTime`, because the proxy job has none; it cites about 60 min (`STANDARD_DEADLINES.unlock`).
+- G2: typecheck, all tests and the build pass, including the standalone copy. The G1 change is **staged first**, and the readability pass is left as the unstaged diff, so G4 reviews it on its own: every non-comment hunk (whitespace-insensitive diff) is checked against the B1 rules.
+- G3: `docs/FLOWS.md` exists, cites a source for each example, and is linked from the DEVELOPER guide and the README. `test/docs.test.ts` checks the facts most likely to drift **against the code**: redeemer indices (SubmitResult 5, Withdraw 0, Mint 0, Burn 2), `STANDARD_DEADLINES` minutes, the 19 datum field names in order (`datumRows`), the x402 header names, the MIP-003 route names, and the step ids of both flows. Each of these must appear in FLOWS.md as the code defines it. Redeemer indices and route paths are read from the **source text** of `src/chain.ts` (the `REDEEMER` `Data.constr(n` entries) and `src/agent.ts` (the `app.get`/`app.post` paths), because neither file can be imported without side effects or new exports. The other facts are imported.
+- G4: one `code-reviewer` pass on the unstaged readability diff plus FLOWS.md. The brief includes a checklist: every non-comment hunk is equivalent, nothing crossing a boundary is renamed, and each FLOWS.md source citation holds.
+
+**Non-goals.** No new features and no UI redesign.

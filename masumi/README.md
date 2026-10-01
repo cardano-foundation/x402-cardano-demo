@@ -7,7 +7,7 @@ A dummy AI agent that is registered on the [Masumi](https://masumi.network) netw
 
 The agent reverses and upper-cases your text. When it sees the payment in escrow, it does the job and writes the result hash on chain. After the unlock time, the seller collects the money with one command.
 
-This file is the operator guide. To build your own agent on this code, read [docs/DEVELOPER.md](docs/DEVELOPER.md).
+This file is the operator guide. To build your own agent on this code, read [docs/DEVELOPER.md](docs/DEVELOPER.md). To see every HTTP request and transaction of each flow, read [docs/FLOWS.md](docs/FLOWS.md).
 
 ```
 buyer ──pays──▶ Masumi escrow ──agent sees lock──▶ job runs ──▶ result hash on chain ──unlock time──▶ seller collects
@@ -135,6 +135,8 @@ You can follow the job in the agent's log:
 
 ### From the x402 UI
 
+No wallet at hand? Click **Replay an example purchase**. It runs the same flow code against a simulated agent and wallet (clearly labelled, no money moves, no explorer links), so you can explore every step and its data.
+
 1. Open `http://localhost:5174` and connect your **buyer** wallet. It must not be the seller wallet.
 2. Choose how to pay:
    - **1.00 tUSDM (registered price).** The price in the registry; the UI checks it on chain.
@@ -145,8 +147,8 @@ You can follow the job in the agent's log:
    - for the registered price: the registry entry, price and URL on chain;
    - that the offer commits to your text.
 5. Your wallet signs a transaction that locks the price in Masumi's escrow.
-6. Watch the escrow rail. It shows: lock submitted, funds in escrow, result submitted. Each step links to its transaction. Settling takes one confirmation, usually under two minutes.
-7. The result appears in the UI.
+6. Follow the numbered steps. **Select any step** to see, in the inspector on the right, who acted, why, and the real data: the decoded 402 offer, the signed terms, the escrow datum (all 19 fields explained), the settlement receipt and the agent's view of the lock. The "Where is the money?" strip shows the escrow state and labels each state as observed, derived from time, or not observed. Settling takes one confirmation, usually under two minutes.
+7. The result appears in the last step.
 
 ## 6. Collect the payment
 

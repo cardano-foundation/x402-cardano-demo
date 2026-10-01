@@ -9,6 +9,22 @@
  *
  * A watcher finds each job's lock in the escrow, runs the task and submits the
  * result hash on chain. The seller collects later with `npm run collect`.
+ *
+ * Reading guide (top to bottom):
+ *   1. the dummy task and input validation          (replace these for a real agent)
+ *   2. the x402 side: in-process facilitator, one issuer + route per offer
+ *   3. the watcher: lock matching, running the job, SubmitResult
+ *   4. the HTTP routes (MIP-003 + x402 + demo extras)
+ *   5. the operator-only Sokosumi proxy
+ *
+ * HTTP surface (public port):
+ *   GET  /availability          MIP-003 health; the registry calls it to mark the agent Online
+ *   GET  /input_schema          MIP-003 input form
+ *   POST /start_job             MIP-003 purchase terms (standard path)
+ *   POST /x402/start_job[/ada]  x402: 402 offer, then paid retry with PAYMENT-SIGNATURE
+ *   GET  /status?job_id=        MIP-003 job status (Sokosumi polls this)
+ *   GET  /jobs/:id, /jobs/by-tx/:hash, /demo/config   demo extras for the UI
+ * See docs/FLOWS.md for every request and response in detail.
  */
 import express, { type NextFunction, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -25,6 +41,7 @@ import { createChain } from "./chain.js";
 import { ESCROW_ADDRESS, NETWORK, paymentKeyHash, TUSDM_UNIT, TUSDM_X402_ASSET } from "./constants.js";
 import { findLock, lockMismatch, type EscrowUtxo, type ExpectedLock } from "./lockMatch.js";
 import { resultHash, standardTerms } from "./masumi.js";
+import { lockSnapshot, view, type Job, type JobInput } from "./jobView.js";
 import { makeRegistryValidator } from "./registry.js";
 
 // ---------------------------------------------------------------- the dummy task
@@ -40,7 +57,7 @@ const INPUT_SCHEMA = {
 /** The "work": reverse and upper-case the text. Replace this with your agent. */
 const runTask = (input: { text: string }) => [...input.text].reverse().join("").toUpperCase();
 
-type JobInput = { identifier_from_purchaser: string; input_data: { text: string } };
+/** Validates a MIP-003 job body; returns the parsed input or an error message. */
 function parseJobInput(body: unknown): JobInput | string {
   const { identifier_from_purchaser: id, input_data: data } = (body ?? {}) as Record<string, unknown>;
   // Even-length hex: the buyer nonce is stored as bytes in the escrow datum.
@@ -52,20 +69,6 @@ function parseJobInput(body: unknown): JobInput | string {
 
 // ---------------------------------------------------------------- jobs
 
-type Status = "awaiting_payment" | "running" | "completed" | "failed";
-interface Job {
-  id: string;
-  path: "standard" | "x402";
-  status: Status;
-  input: JobInput;
-  expected: ExpectedLock;
-  /** The MIP-003 start_job response returned to the buyer. */
-  terms: Record<string, unknown>;
-  lockTx?: string;
-  resultTx?: string;
-  result?: string;
-  error?: string;
-}
 const jobs = new Map<string, Job>();
 const jobsByTx = new Map<string, Job>();
 
@@ -75,6 +78,11 @@ const chain = createChain({ blockfrost, mnemonic: seller.mnemonic, sellerAddress
 const validateRegistryClaim = makeRegistryValidator(blockfrost);
 
 // ---------------------------------------------------------------- x402
+//
+// x402 has three roles: the client (the UI's wallet), the resource server
+// (this agent's route) and the facilitator (verifies the payment and puts it
+// on chain). Here the facilitator runs inside the agent and holds no keys: it
+// only verifies and broadcasts the buyer's already signed transaction.
 
 const facilitator = new x402Facilitator().register(NETWORK, new FacilitatorScheme(
   toFacilitatorCardanoSigner({ network: NETWORK, provider: { blockfrost }, awaitConfirmation: false }),
@@ -108,9 +116,14 @@ function x402Offer(path: string, price: { amount: string; asset: string }, claim
   const resource = `${publicUrl()}${path}`;
   const http = new x402HTTPResourceServer(server, {
     [`POST ${path}`]: {
+      // The URL buyers check against the registry's api_base_url (public, not localhost).
       resource,
       accepts: {
+        // "exact": pay exactly `price`. payTo is Masumi's escrow, not the seller.
+        // maxTimeoutSeconds (300) becomes the offer's pay-by window.
         scheme: "exact", network: NETWORK, payTo: ESCROW_ADDRESS, maxTimeoutSeconds: 300, price,
+        // "masumi" makes @x402/cardano issue escrow terms (datum fields, seller signature)
+        // instead of a plain transfer. The buyer pays the network fee.
         extra: { assetTransferMethod: "masumi", areFeesSponsored: false },
       },
       description: "Masumi agent job paid into escrow", mimeType: "application/json",
@@ -125,8 +138,13 @@ const offers = [
   ...(adaPriceLovelace ? [x402Offer("/x402/start_job/ada", { amount: adaPriceLovelace.toString(), asset: "lovelace" }, undefined)] : []),
 ];
 
-/** Records a paid x402 job. Runs before settlement, so it must not touch the chain. */
+/**
+ * Records a paid x402 job. @x402/express calls the route handler after
+ * verifying the payment but **before** settling it, so this must not touch the
+ * chain: the watcher picks the job up once the lock is visible.
+ */
 function x402Job(req: Request): Job {
+  // PAYMENT-SIGNATURE is the x402 v2 header, the only one this middleware verifies; the X-PAYMENT fallback is defensive.
   const payment = decodePaymentSignatureHeader((req.get("PAYMENT-SIGNATURE") ?? req.get("X-PAYMENT"))!);
   const { txHash } = decodeCardanoTransaction(String(payment.payload.transaction));
   const existing = jobsByTx.get(txHash);
@@ -137,6 +155,7 @@ function x402Job(req: Request): Job {
   const input = extra.inputCommitment.parts[0].content as JobInput;
   const job: Job = {
     id: randomUUID(), path: "x402", status: "awaiting_payment", input,
+    // What the escrow datum must say: exactly the terms this agent signed (see lockMatch.ts).
     expected: {
       sellerAddress: terms.sellerAddress, referenceKey: extra.referenceKey, referenceSignature: extra.referenceSignature,
       sellerNonce: terms.sellerNonce, buyerNonce: terms.buyerNonce, agentIdentifier: terms.agentIdentifier ?? "",
@@ -144,6 +163,7 @@ function x402Job(req: Request): Job {
       unlockTime: BigInt(terms.unlockTime), externalDisputeUnlockTime: BigInt(terms.externalDisputeUnlockTime),
       unit: payment.accepted.asset, amount: BigInt(payment.accepted.amount), txHash,
     },
+    // The same fields a MIP-003 start_job response carries, so both paths look alike to buyers.
     terms: {
       blockchainIdentifier: extra.blockchainIdentifier, agentIdentifier: terms.agentIdentifier, sellerVKey: paymentKeyHash(terms.sellerAddress),
       identifierFromPurchaser: input.identifier_from_purchaser, input_hash: terms.inputHash,
@@ -158,7 +178,12 @@ function x402Job(req: Request): Job {
 }
 
 // ---------------------------------------------------------------- watcher
+//
+// Every 10 s: for each job still awaiting payment, look for its lock in the
+// escrow, check it against the signed terms, run the task and submit the
+// result hash (vested_pay redeemer SubmitResult) before submit_result_time.
 
+/** Give up this long before submit_result_time: SubmitResult needs a validity window that ends before it. */
 const SUBMIT_MARGIN_MS = 5 * 60_000;
 /** Allowance for chain time vs local clock and Blockfrost indexing lag. */
 const PAY_BY_MARGIN_MS = 5 * 60_000;
@@ -212,12 +237,12 @@ async function advance(job: Job, byNonce: Map<string, EscrowUtxo[]>) {
     }
     return;
   }
-  job.status = "running";
-  job.lockTx = lock.txHash;
+  Object.assign(job, { status: "running", lockTx: lock.txHash, lock: lockSnapshot(lock) });
   const result = runTask(job.input.input_data);
-  await chain.submitResult(lock, resultHash(job.input.identifier_from_purchaser, result), txHash => {
+  const hash = resultHash(job.input.identifier_from_purchaser, result);
+  await chain.submitResult(lock, hash, ({ txHash, sellerCooldownTime }) => {
     // The node accepted it: the result is on its way on chain, report it now.
-    Object.assign(job, { status: "completed", result, resultTx: txHash, error: undefined });
+    Object.assign(job, { status: "completed", result, resultHash: hash, resultTx: txHash, sellerCooldownTime, error: undefined });
     console.log(`[job ${job.id}] completed; SubmitResult ${txHash}`);
   });
 }
@@ -243,10 +268,6 @@ setInterval(() => {
 
 const app = express();
 app.use(express.json({ limit: "16kb" }));
-const view = (job: Job) => ({
-  id: job.id, job_id: job.id, path: job.path, status: job.status, ...job.terms,
-  lockTx: job.lockTx, resultTx: job.resultTx, result: job.result, error: job.error,
-});
 const validBody = (req: Request, res: Response, next: NextFunction) => {
   const parsed = parseJobInput(req.body);
   if (typeof parsed === "string") res.status(400).json({ error: parsed });
@@ -261,6 +282,11 @@ app.get("/input_schema", (_req, res) => { res.json(INPUT_SCHEMA); });
 const MAX_OPEN_JOBS = 500;
 const tooBusy = () => [...jobs.values()].filter(j => j.status === "awaiting_payment").length >= MAX_OPEN_JOBS;
 
+/**
+ * MIP-003 start_job, standard Masumi path. Signs purchase terms the way the
+ * Masumi Payment Service would (masumi.ts standardTerms); the buyer's own
+ * payment node then locks the funds. Nothing is paid in this request.
+ */
 app.post("/start_job", validBody, async (req, res, next) => {
   if (tooBusy()) { res.status(503).json({ error: "Too many open jobs; try again later." }); return; }
   try {
@@ -284,6 +310,9 @@ app.post("/start_job", validBody, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// x402 routes: validate the body, cap open jobs, then the x402 payment gate.
+// Without PAYMENT-SIGNATURE the gate answers 402 with a fresh signed offer; with
+// it, the gate verifies, runs the handler, then settles before the response is sent.
 for (const offer of offers) {
   const gate = paymentMiddlewareFromHTTPServer(offer.http, undefined, undefined, false);
   app.post(offer.path, validBody, (_req, res, next) => {
@@ -291,6 +320,7 @@ for (const offer of offers) {
   }, gate, (req, res) => { res.json(view(x402Job(req))); });
 }
 
+/** MIP-003 status: awaiting_payment | running | completed | failed, plus the result once completed. */
 app.get("/status", (req, res) => {
   const job = jobs.get(String(req.query.job_id));
   if (!job) { res.status(404).json({ error: "Unknown job_id" }); return; }
