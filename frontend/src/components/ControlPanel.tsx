@@ -64,8 +64,7 @@ export function ControlPanel({
   return (
     <section className="control-panel" aria-label="Connect a wallet and run the protocol">
       <div className="control-panel__step">
-        <span className="control-panel__step-label mono-tag">Step A</span>
-        <h2>Connect a wallet</h2>
+        <h2 className="section-title"><span className="section-title__n">1</span>Connect a wallet</h2>
         <WalletPicker
           wallets={wallets}
           connecting={connecting}
@@ -76,11 +75,8 @@ export function ControlPanel({
         />
       </div>
 
-      <div className="control-panel__divider" aria-hidden="true" />
-
       <div className="control-panel__step">
-        <span className="control-panel__step-label mono-tag">Step B</span>
-        <h2>Run the protocol</h2>
+        <h2 className="section-title"><span className="section-title__n">2</span>Run the protocol</h2>
 
         {configLoading && (
           <p className="control-panel__hint" role="status">
@@ -150,6 +146,8 @@ export function ControlPanel({
               </div>
             )}
 
+            {/* The action stays in view at the bottom of the controls column. */}
+            <div className="action-bar">
             {runState === "uncertain" ? (
               <button type="button" className="btn btn--primary" onClick={onResume}>
                 Check this payment again
@@ -171,6 +169,7 @@ export function ControlPanel({
             {!connection && (
               <p className="control-panel__hint control-panel__hint--muted">Connect a preprod wallet first.</p>
             )}
+            </div>
           </>
         )}
       </div>

@@ -388,3 +388,9 @@ test("the Sokosumi guard refuses a client that is not on loopback", () => {
   sokosumiGuard(new Set([ORIGIN]))({ ...req, socket: { localPort: 4021, remoteAddress: "127.0.0.1" } } as never, res as never, () => { passed = true; });
   assert.equal(passed, true, "the same request from loopback passes");
 });
+
+test("a Masumi registry identifier in SOKOSUMI_AGENT_ID is refused with a pointer to the right id", () => {
+  const registryId = `67ab0c92c4ac1610895a1c965ee50aba41a8f1513b15240723b3bd0b10${"ab".repeat(28)}000000`;
+  assert.throws(() => masumiOptionsFromEnv({ SOKOSUMI_API_KEY: "k", SOKOSUMI_AGENT_ID: registryId }), /Sokosumi's own agent id/);
+  assert.ok(masumiOptionsFromEnv({ SOKOSUMI_API_KEY: "k", SOKOSUMI_AGENT_ID: "01a0f73f-26c5-704a-ae93-7673ee5f704c" }).sokosumi);
+});

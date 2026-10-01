@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "./lib/useWallet";
 import { TabNav, type TabInfo } from "./components/TabNav";
-import { Footer } from "./components/Footer";
 import { TransactionsTab } from "./tabs/TransactionsTab";
 import { MasumiTab } from "./tabs/MasumiTab";
 
@@ -22,7 +21,7 @@ const showInUrl = (tab: TabId) =>
   window.history.replaceState(null, "", tab === "masumi" ? "#masumi" : window.location.pathname + window.location.search);
 
 /**
- * The page shell: one wallet connection and one header for two demos. The
+ * The page shell: one wallet connection and one top bar for two demos. The
  * selected tab lives in the URL hash (#masumi), so it can be linked and
  * survives a reload. Only the selected tab is mounted.
  */
@@ -46,18 +45,22 @@ export default function App() {
   const onBusyChange = useCallback((next: boolean) => setBusy(next), []);
 
   return (
-    <div className="page">
-      <div className="page__atmosphere" aria-hidden="true" />
-      <main className="stage">
+    <div className="app">
+      <header className="topbar">
+        <span className="topbar__brand"><strong>x402</strong> on Cardano</span>
         <TabNav tabs={TABS} current={tab} onChange={select}
-          lockedReason={busy ? "A payment is in progress. Finish it before switching demos." : undefined} />
-        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+          lockedReason={busy ? "Payment in progress: finish it before switching." : undefined} />
+        <span className="topbar__net" title="Every transaction here uses the Cardano preprod testnet">
+          <span className="topbar__net-dot" aria-hidden="true" />preprod
+        </span>
+      </header>
+      <main className="workspace">
+        <div className="workspace__panel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === "transactions"
             ? <TransactionsTab wallet={wallet} onBusyChange={onBusyChange} />
             : <MasumiTab wallet={wallet} onBusyChange={onBusyChange} />}
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

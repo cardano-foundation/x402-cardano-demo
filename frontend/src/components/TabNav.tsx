@@ -42,15 +42,16 @@ export function TabNav<Id extends string>({ tabs, current, onChange, lockedReaso
               id={`tab-${tab.id}`}
               aria-selected={selected}
               aria-controls={`panel-${tab.id}`}
+              aria-describedby={`tab-${tab.id}-detail`}
               tabIndex={selected ? 0 : -1}
               className="tab-nav__tab"
               disabled={!selected && Boolean(lockedReason)}
-              title={!selected ? lockedReason : undefined}
+              title={!selected && lockedReason ? lockedReason : undefined}
               onClick={() => onChange(tab.id)}
               onKeyDown={(event) => onKey(event, index)}
             >
               <span className="tab-nav__label">{tab.label}</span>
-              <span className="tab-nav__detail">{tab.detail}</span>
+              <span className="visually-hidden" id={`tab-${tab.id}-detail`}>{tab.detail}</span>
             </button>
           );
         })}

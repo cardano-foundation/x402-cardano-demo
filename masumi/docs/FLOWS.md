@@ -2,7 +2,8 @@
 
 This is the protocol reference for the demo. For each flow it shows who talks to whom, what the HTTP requests and responses look like, what each party checks, and how each Cardano transaction is built.
 
-- Read [DEVELOPER.md](DEVELOPER.md) first for the concepts: the registry, the escrow, and the two hire paths.
+- Read [DEVELOPER.md](DEVELOPER.md) first for the concepts, the glossary and the two hire paths side by side.
+- To follow a run, read §3 (x402) or §4 (Sokosumi). §5–§8 are the seller side and the on-chain details; §1, §2 and §7 work as reference.
 - Read the [README](../README.md) to run the demo.
 
 **How to read the examples.**
@@ -12,7 +13,29 @@ This is the protocol reference for the demo. For each flow it shows who talks to
 - Paths starting `src/` are in this folder (`masumi/`); `frontend/` and `server/` are the main demo next to it.
 - Times are POSIX milliseconds, as in the datum.
 
-`test/docs.test.ts` checks the facts most likely to drift against the code: redeemer indices, routes, deadlines, datum field order, header names and UI step ids.
+Two tests check the facts most likely to drift against the code: `test/docs.test.ts` here (redeemer indices, the agent's routes, deadlines, header names) and the main demo's `tests/masumi-tab-docs.test.ts` (datum field order, UI step ids, `/masumi` routes).
+
+**From the screen to this document.** The Masumi agent tab numbers its steps; this document uses their ids.
+
+| x402 step on screen | Id | Section |
+|---|---|---|
+| 01 Ask for the job, get a 402 offer | `request` | §3.1 |
+| 02 Verify the offer | `verify` | §3.2 |
+| 03 Sign the escrow lock | `sign` | §3.3 |
+| 04 Send the payment over HTTP | `pay` | §3.4 |
+| 05 The facilitator verifies and broadcasts | `settle` | §3.5 |
+| 06 The agent finds the lock on chain | `lock` | §3.6, §5 |
+| 07 The agent submits the result hash | `result` | §3.6, §5 |
+| 08 Seller collects after the unlock time | `collect` | §3.7, §6 |
+
+| Sokosumi step on screen | Id | Section |
+|---|---|---|
+| 01 Create a job on Sokosumi | `hire` | §4.1 |
+| 02 Sokosumi calls the agent's start_job | `startJob` | §4.2 |
+| 03 Sokosumi's payment node locks tUSDM in escrow | `pay` | §4.3 |
+| 04 The agent works and submits the result hash | `work` | §4.4, §5 |
+| 05 Sokosumi delivers the result | `done` | §4.4 |
+| 06 Seller collects after the unlock time | `collect` | §4.5, §6 |
 
 ## Contents
 
@@ -31,7 +54,7 @@ This is the protocol reference for the demo. For each flow it shows who talks to
 
 | Party | Runs where | Holds keys? | Code |
 |---|---|---|---|
-| Buyer (x402) | the main demo's Masumi tab, with a CIP-30 wallet | the buyer's wallet | `frontend/src/masumi/x402Flow.ts`, `frontend/src/masumi/cip30Signer.ts` |
+| Buyer (x402) | the main demo's Masumi agent tab, with a CIP-30 wallet | the buyer's wallet | `frontend/src/masumi/x402Flow.ts`, `frontend/src/masumi/cip30Signer.ts` |
 | Demo server | the main demo's `server/` (port 4021, `127.0.0.1` only) | none for x402; the operator's `SOKOSUMI_API_KEY` | `server/src/masumi.ts` |
 | Agent (seller) | `npm run agent` | the seller mnemonic | `src/agent.ts`, `src/chain.ts` |
 | Facilitator | inside the agent process | none (it only broadcasts signed transactions) | `src/agent.ts` (`facilitatorClient`) |
@@ -39,7 +62,7 @@ This is the protocol reference for the demo. For each flow it shows who talks to
 | Escrow | the `vested_pay` V2 script on preprod | none; rules only | `contracts/payment-v2.plutus.json` |
 | Registry | the registry V2 mint policy on preprod | none; rules only | `contracts/registry-v2.plutus.json` |
 
-**The agent's HTTP routes** (`src/agent.ts`). The Masumi tab never calls the agent directly. It calls the demo server under `/masumi`, which forwards a fixed set of these routes unchanged: `/availability`, `/demo/config` (as `/masumi/config`), `/x402/start_job[/ada]` and `/jobs/by-tx/:hash`. The examples below show the agent-side paths.
+**The agent's HTTP routes** (`src/agent.ts`). The Masumi agent tab never calls the agent directly. It calls the demo server under `/masumi`, which forwards a fixed set of these routes unchanged: `/availability`, `/demo/config` (as `/masumi/config`), `/x402/start_job[/ada]` and `/jobs/by-tx/:hash`. The examples below show the agent-side paths.
 
 | Route | Kind | Purpose |
 |---|---|---|
@@ -53,7 +76,7 @@ This is the protocol reference for the demo. For each flow it shows who talks to
 | `GET /jobs/by-tx/:hash` | demo | The same view, looked up by the lock transaction hash |
 | `GET /demo/config` | demo | The offers and addresses; the demo server adds whether Sokosumi hiring is enabled |
 
-**The demo server's `/masumi` routes** (`server/src/masumi.ts`). The Masumi tab calls them at `VITE_SERVER_URL`.
+**The demo server's `/masumi` routes** (`server/src/masumi.ts`). The Masumi agent tab calls them at `VITE_SERVER_URL`.
 
 | Route | What it does |
 |---|---|
@@ -131,7 +154,7 @@ The asset in `fixed` is the full 56+18-hex Masumi tUSDM unit (`TUSDM_UNIT`), sho
 
 ## 3. x402 purchase
 
-The buyer is the main demo's Masumi tab. The client code is `runX402` (`frontend/src/masumi/x402Flow.ts`); the signer is `createCip30Signer` (`frontend/src/masumi/cip30Signer.ts`). Each request below goes through the demo server's `/masumi` forward (§1), which the diagram leaves out. The UI steps, by id: `request`, `verify`, `sign`, `pay`, `settle`, `lock`, `result`, `collect`.
+The buyer is the main demo's Masumi agent tab. The client code is `runX402` (`frontend/src/masumi/x402Flow.ts`); the signer is `createCip30Signer` (`frontend/src/masumi/cip30Signer.ts`). Each request below goes through the demo server's `/masumi` forward (§1), which the diagram leaves out. The UI steps, by id: `request`, `verify`, `sign`, `pay`, `settle`, `lock`, `result`, `collect`.
 
 ```mermaid
 sequenceDiagram
@@ -312,7 +335,7 @@ The UI polls every 5 s. It answers `404 {"error":"Unknown transaction"}` until t
 
 The `lovelace` value `1452160` is *simulated* (from `exampleDeps`). `completed` means the node **accepted** SubmitResult; the confirmation follows.
 
-The UI gives up in three cases:
+The UI gives up in four cases:
 - the job reports `failed`;
 - the paid request was rejected (non-2xx) and the agent does not know the transaction;
 - after 6 network failures in a row;
@@ -326,11 +349,11 @@ The `collect` step is agent-driven: the seller withdraws after `unlock_time` ([�
 
 ## 4. Sokosumi purchase (standard MIP-003 path)
 
-Sokosumi hires the agent as any Masumi Payment Service buyer would. The Masumi tab can start that from the browser through the demo server's Sokosumi proxy (`runSokosumi`, `frontend/src/masumi/sokosumiFlow.ts`). The UI steps, by id: `hire`, `startJob`, `pay`, `work`, `done`, `collect`. The UI observes only `hire` and the Sokosumi job status; `startJob` and `pay` happen inside Sokosumi.
+Sokosumi hires the agent as any Masumi Payment Service buyer would. The Masumi agent tab can start that from the browser through the demo server's Sokosumi proxy (`runSokosumi`, `frontend/src/masumi/sokosumiFlow.ts`). The UI steps, by id: `hire`, `startJob`, `pay`, `work`, `done`, `collect`. The UI observes only `hire` and the Sokosumi job status; `startJob` and `pay` happen inside Sokosumi.
 
 ```mermaid
 sequenceDiagram
-  participant U as Masumi tab
+  participant U as Masumi agent tab
   participant P as Demo server (/masumi/sokosumi)
   participant S as Sokosumi API
   participant N as Sokosumi payment node
@@ -354,7 +377,7 @@ sequenceDiagram
   end
 ```
 
-### 4.1 `hire`: Masumi tab → demo server → Sokosumi
+### 4.1 `hire`: Masumi agent tab → demo server → Sokosumi
 
 ```http
 POST /masumi/sokosumi/hire HTTP/1.1
@@ -378,7 +401,7 @@ The proxy (`sokosumiRouter` in `server/src/masumi.ts`) spends the operator's cre
 `createSokosumi().hire` (`src/sokosumi.ts`) then makes these calls, each with `Authorization: Bearer <SOKOSUMI_API_KEY>`:
 
 ```http
-GET /v1/agents?kind=cardano&limit=50[&cursor=<nextCursor>]     (only without SOKOSUMI_AGENT_ID; exact AGENT_NAME match)
+GET /v1/agents?kind=cardano&limit=50[&cursor=<nextCursor>]     (only without SOKOSUMI_AGENT_ID; exact SOKOSUMI_AGENT_NAME match)
 GET /v1/agents/<agentId>/input-schema
 POST /v1/agents/<agentId>/jobs
 Content-Type: application/json
@@ -452,7 +475,7 @@ HTTP/1.1 200 OK
 {"job_id":"<uuid>","status":"completed","result":"IMUSAM OLLEH"}
 ```
 
-The Masumi tab polls `GET /masumi/sokosumi/jobs/<id>` every 5 s. Source: `createSokosumi().job` in `src/sokosumi.ts`, reduced by `pick`:
+The Masumi agent tab polls `GET /masumi/sokosumi/jobs/<id>` every 5 s. Source: `createSokosumi().job` in `src/sokosumi.ts`, reduced by `pick`:
 
 ```http
 GET /masumi/sokosumi/jobs/<sokosumi job id> HTTP/1.1

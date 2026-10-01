@@ -35,8 +35,8 @@ export function SettlementWait({ startedAt }: SettlementWaitProps) {
       <div className="settlement-wait__copy">
         <p className="settlement-wait__title">Waiting for Cardano settlement…</p>
         <p className="settlement-wait__detail">
-          The facilitator checks the requested confirmation depth. Pending payments and interrupted responses
-          get up to three automatic checks using the same signature. Keep this page open; each check can take a few minutes.
+          The facilitator checks the requested confirmation depth. The page keeps checking the same signed payment
+          on its own until it is confirmed or expires. Keep this page open; no new wallet approval is needed.
         </p>
       </div>
       <div className="settlement-wait__clock mono-tag">{formatElapsed(elapsed)}</div>

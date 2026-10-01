@@ -1,3 +1,5 @@
+> **Historical plan.** The UI and the Sokosumi proxy described here have since moved to the main demo (`../frontend`, `../server`). For the current design, read [README.md](../README.md), [DEVELOPER.md](DEVELOPER.md) and [FLOWS.md](FLOWS.md).
+
 # Masumi End-to-End Demo — Implementation Plan (rev. 4)
 
 **Goal.** A standalone `masumi/` demo with a dummy agent that is:

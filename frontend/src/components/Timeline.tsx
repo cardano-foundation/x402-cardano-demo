@@ -1,5 +1,6 @@
 import type { FlowStep } from "../x402/flow";
 import { STEP_COPY, STEP_ORDER, type StepId } from "../lib/stepCopy";
+import { ACTORS } from "../lib/actors";
 import { asPaymentRequired, pickCardanoRequirements } from "../lib/x402Types";
 import { StepCard, type StepStatus } from "./StepCard";
 import { SettlementWait } from "./SettlementWait";
@@ -25,10 +26,7 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
 
   return (
     <section className="timeline-section" aria-label="Protocol steps">
-      <div className="timeline-section__intro">
-        <h2>Five visible stages, from 402 to receipt</h2>
-        <CodeAside />
-      </div>
+      <TimelineIntro />
 
       <ol className="timeline">
         {STEP_ORDER.map((id, i) => {
@@ -111,5 +109,36 @@ function StepCardSlot({
         </li>
       )}
     </>
+  );
+}
+
+function TimelineIntro() {
+  return (
+    <div className="timeline-section__intro">
+      <h2>Five visible stages, from 402 to receipt</h2>
+      <details className="code-details">
+        <summary>Client code</summary>
+        <CodeAside />
+      </details>
+    </div>
+  );
+}
+
+/** Before the first payment: the five stages, so the column shows what is coming. */
+export function TimelinePreview() {
+  return (
+    <section className="timeline-section" aria-label="Protocol steps">
+      <TimelineIntro />
+      <ol className="timeline-preview">
+        {STEP_ORDER.map((id, i) => (
+          <li key={id} className="timeline-preview__item">
+            <span className="timeline-preview__index">{String(i + 1).padStart(2, "0")}</span>
+            <span className="timeline-preview__label">{STEP_COPY[id].label}</span>
+            <span className="timeline-preview__actor">{ACTORS.find((actor) => actor.id === STEP_COPY[id].actor)?.label}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="timeline-preview__hint">Connect a wallet and pay to run these steps live.</p>
+    </section>
   );
 }

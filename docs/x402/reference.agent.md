@@ -1,5 +1,7 @@
 # x402 Cardano — Machine Reference
 
+For people: start with the [README](../../README.md) and the [guide](guide.md). This file is a terse lookup table, checked by `npm run verify:docs`.
+
 Scope: this preprod demo and official npm artifacts **2.26.0**. Protocol sources are linked under CITATIONS. This reference is checked against installed exports with `npm run verify:docs`; behavioral claims also need the application tests.
 
 ## WIRE
@@ -37,9 +39,10 @@ Flow: client signs without broadcast → facilitator verifies → resource handl
 | POST | `/verify` | Read-only payment validation; body `{paymentPayload, paymentRequirements}` |
 | POST | `/settle` | Submit once and resume observation by canonical transaction ID; same body shape |
 | GET | `/supported` | Supported network, scheme, transfer methods and confirmation range |
-| GET | `/health` | Demo-only health and facilitator wait budget |
+| GET | `/health` | Demo-only: facilitator health and wait budget; the resource server's `/health` reports only status and network |
 | GET | `/demo/config` | Demo resource server: available methods, current confirmation default and range |
 | POST | `/demo/config` | Demo resource server: accepts only `{l1Confirmations: integer}` |
+| * | `/masumi/*` | Demo resource server: forward to the Masumi agent and the guarded Sokosumi proxy; see `masumi/docs/FLOWS.md` §1 |
 
 Protocol-invalid payments are valid `/verify` or `/settle` HTTP responses containing failure results. Transport failure and protocol failure are distinct.
 
@@ -64,7 +67,7 @@ Masumi additional checks, not extra numbered rules:
 - Valid 19-field V2 inline datum, `FundsLocked`, empty result, zero cooldown timers; signed fields match exactly.
 - Buyer controls the nonce input; participant and return-address invariants hold.
 - Exact requested asset set and amount; collateral and post-result minimum UTxO hold; TTL respects `payByTime`.
-- Nonempty agent identity requires independent registry validation. This demo omits it.
+- Nonempty agent identity requires independent registry validation. The Masumi agent's facilitator and the Masumi agent tab's wallet adapter both check it against the on-chain registry (`masumi/src/registry.ts`); the unlisted tADA offer carries no identity and skips it.
 - Issuer preserves each fresh quote and binds its `termsDigest` to the first canonical transaction ID.
 
 The general `script` method binds `payTo` to the declared script but cannot validate arbitrary contract-specific datum meaning. This demo does not offer that method.
@@ -76,7 +79,7 @@ The general `script` method binds `payTo` to the declared script but cannot vali
 | Scheme | `exact` |
 | Networks | `cardano:mainnet`, `cardano:preprod`, `cardano:preview`; demo uses preprod |
 | Assets | `lovelace` or `policyId.assetNameHex` |
-| Transfer methods | Specification: `default`, `masumi`, `script`; demo: `default` (Transactions tab), `masumi` (Masumi agent tab, issued by the agent in `masumi/`) |
+| Transfer methods | Specification: `default`, `masumi`, `script`; demo: `default` (Transactions tab, bundled facilitator on 4022), `masumi` (Masumi agent tab, issued, verified and submitted by the agent in `masumi/` with its built-in facilitator) |
 | Fees | `areFeesSponsored: false`; payer funds fees and minimum output ADA |
 | Confirmation level `-1` | Facilitator's own broadcast acceptance; requires operator opt-in |
 | Confirmation level `0` | Canonical block inclusion |
@@ -93,11 +96,11 @@ Canonical network names use CAIP-2 syntax; `cardano` is not a CASA-registered na
 - The browser never broadcasts; the facilitator signs nothing.
 - A settlement claim uses the canonical transaction ID, not signed CBOR encoding.
 - `@x402/core` retries `settlement_pending` once with identical payload and requirements.
-- A browser-facing pending/unknown result retains the original URL and `PAYMENT-SIGNATURE`; checking it never builds another transaction. The UI requests three automatic serial checks, five seconds apart, for pending or transient failures. Exhaustion pauses for manual recovery; invalid/mismatched receipts and verification rejections require inspection.
+- A browser-facing pending/unknown result retains the original URL and `PAYMENT-SIGNATURE`; checking it never builds another transaction. The UI keeps checking pending or transient results serially (pauses grow from 5 s to 30 s) until settled, expired or rejected, for up to 20 minutes; only then does it pause for manual recovery. Invalid/mismatched receipts and verification rejections pause at once and require inspection.
 - A timeout, transport error, or generic `exact_cardano_settlement_failed` after submission does not establish non-payment. Only a matching definitive-rejection or explicitly expired receipt releases an uncertain payment. The bundled facilitator confirms any SDK expiry result with a successful fresh evidence lookup returning unknown; lookup errors or observed transactions remain pending. The extra lookup is capped at 15 seconds.
 - Application handlers may run on each paid retry. This demo caches the body and binds one transaction to one route and request ID. A successful verification is reused only for the identical payload, requirements and operation; the official settlement path still performs post-broadcast checks. Invalid verification results never reserve an operation. This lets previously submitted payments reach confirmation or explicit expiry instead of failing fresh TTL/unspent-input validation.
 - Masumi requires the originally issued quote; unknown or altered terms are rejected before settlement. A second transaction cannot claim the same terms.
-- Successful Masumi settlement means escrow lock, not seller payout. The Masumi agent tab's agent (`masumi/`) submits the result and collects after `unlock_time`; refunds and disputes are not implemented.
+- Successful Masumi settlement means escrow lock, not seller payout. The Masumi agent tab's agent (`masumi/`) submits the result hash; after `unlock_time` the seller runs `npm run collect`. Refunds and disputes are not implemented.
 - Browser retry state, application operation records and facilitator settlement records are process-local. No restart or distributed persistence guarantee is provided.
 
 ## ERRORS
@@ -171,7 +174,7 @@ Default native asset, `USDM_PREPROD_ASSET`:
 | Component | Port | Configuration |
 |---|---|---|
 | Frontend | 5173 | `VITE_BLOCKFROST_PROJECT_ID`, `VITE_SERVER_URL` |
-| Server | 4021 | `SERVER_CARDANO_ADDRESS`, `FACILITATOR_URL`, optional `USDM_ASSET`, `L1_CONFIRMATIONS`, `FACILITATOR_TIMEOUT_MS`; Masumi tab: `MASUMI_AGENT_URL`, `FRONTEND_ORIGINS`, `SOKOSUMI_API_KEY`, `SOKOSUMI_AGENT_ID`, `SOKOSUMI_AGENT_NAME`, `SOKOSUMI_MAX_CREDITS`, `SOKOSUMI_ORGANIZATION_SLUG`, `SOKOSUMI_API_URL` |
+| Server | 4021 | `SERVER_CARDANO_ADDRESS`, `FACILITATOR_URL`, optional `USDM_ASSET`, `L1_CONFIRMATIONS`, `FACILITATOR_TIMEOUT_MS`; Masumi agent tab: `MASUMI_AGENT_URL`, `FRONTEND_ORIGINS`, `SOKOSUMI_API_KEY`, `SOKOSUMI_AGENT_ID`, `SOKOSUMI_AGENT_NAME`, `SOKOSUMI_MAX_CREDITS`, `SOKOSUMI_ORGANIZATION_SLUG`, `SOKOSUMI_API_URL` |
 | Facilitator | 4022 | `BLOCKFROST_PROJECT_ID`, optional `BLOCKFROST_BASE_URL`, `ACCEPT_MEMPOOL`, `CONFIRMATION_TIMEOUT_MS` |
 
 - Node 22+; one root npm workspace and `package-lock.json`; `./setup.sh` runs `npm ci` and copies only missing `.env` files.

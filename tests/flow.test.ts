@@ -171,3 +171,31 @@ test("pending receipts explain when a provider outage prevents confirming expiry
   assert.match(result.message, /expiry cannot be confirmed/);
   assert.equal(ctx.state.builds, 1);
 });
+
+test("with a deadline, automatic checks continue past the count until the payment settles", async t => {
+  let calls = 0;
+  const ctx = await setup(t, (_request, transaction) => receipt(transaction, ++calls < 8));
+  const result = await runPaymentFlow("http://demo.test", ctx.client, () => {}, "default", { automaticChecks: 3, retryDelayMs: 0, checkUntil: Date.now() + 60_000 });
+  assert.equal(result.status, "settled");
+  assert.equal(calls, 8);
+  assert.equal(ctx.state.builds, 1);
+  assert.equal(new Set(ctx.requests.slice(1).map(request => request.headers.get("PAYMENT-SIGNATURE"))).size, 1);
+});
+
+test("with a deadline, a payment that stays pending is retained once the deadline passes", async t => {
+  let calls = 0;
+  const ctx = await setup(t, (_request, transaction) => { calls++; return receipt(transaction, true); });
+  const result = await runPaymentFlow("http://demo.test", ctx.client, () => {}, "default", { automaticChecks: 1, retryDelayMs: 5, maxRetryDelayMs: 20, checkUntil: Date.now() + 1_000 });
+  assert.equal(result.status, "pending");
+  assert.ok(calls > 2, `kept checking past the count (${calls} calls)`);
+  assert.match(result.message, /automatic checks paused/i);
+  assert.equal(ctx.state.builds, 1);
+});
+
+test("with a deadline, a rejected check still stops automatic checking at once", async t => {
+  let calls = 0;
+  const ctx = await setup(t, () => { calls++; return receipt("a".repeat(64)); });
+  const result = await runPaymentFlow("http://demo.test", ctx.client, () => {}, "default", { automaticChecks: 3, retryDelayMs: 0, checkUntil: Date.now() + 60_000 });
+  assert.equal(result.status, "unknown");
+  assert.equal(calls, 1);
+});

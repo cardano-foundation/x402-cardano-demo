@@ -1,13 +1,25 @@
 /* ==========================================================================
    Masumi tab
    ==========================================================================
-   Built on the page's tokens and components (hero, rail, control panel,
-   step cards, status pills). Only what the Masumi flow adds is styled here:
-   the money on the rail, the route picker, the step inspector and the data
-   views inside it. Everything is scoped to .masumi-tab and uses :root tokens.
+   Uses the page's tokens and shared components (intro, control panel,
+   status pills, buttons). Styled here: the money rail strip, the route
+   picker, the step list and the inspector with its data views. Scoped to
+   .masumi-tab; every colour is a :root token.
    ========================================================================== */
 
-/* -- money on the rail ------------------------------------------------------*/
+/* -- money rail strip ---------------------------------------------------------*/
+
+.masumi-tab .money-rail {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.masumi-tab .money-rail .rail__track {
+  padding-top: var(--space-5);
+}
 
 .masumi-tab .money-rail .rail__node {
   position: relative;
@@ -16,96 +28,101 @@
 .masumi-tab .money-rail__amount {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + var(--space-2));
+  bottom: calc(100% + var(--space-1));
   transform: translateX(-50%);
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--signal-line);
-  border-radius: var(--radius-sm);
-  background: var(--signal-soft);
-  color: var(--signal);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--value-line);
+  border-radius: 999px;
+  background: var(--value-soft);
+  color: var(--value);
+  font-size: 0.75rem;
+  font-weight: 600;
   white-space: nowrap;
-  animation: step-in 0.4s ease both;
+  animation: step-in 0.3s ease both;
+}
+
+/* Only the money holder is lit, in the money colour. */
+.masumi-tab .money-rail .rail__node[data-state="active"] {
+  border-color: var(--value);
+  background: var(--value-soft);
+}
+
+.masumi-tab .money-rail .rail__node[data-state="active"] .rail__node-label {
+  color: var(--value);
+}
+
+.masumi-tab .money-rail .rail__node[data-state="done"] {
+  border-color: var(--value-line);
+}
+
+.masumi-tab .money-rail .rail__connector[data-state="done"] .rail__connector-line {
+  border-top-color: var(--value-line);
 }
 
 .masumi-tab .rail__node[data-state="success"] .money-rail__amount {
-  border-color: var(--confirmed);
-  background: var(--confirmed-soft);
-  color: var(--confirmed);
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 
 .masumi-tab .rail__node[data-state="error"] .money-rail__amount {
-  border-color: var(--danger);
-  background: var(--danger-soft);
-  color: var(--danger);
+  border-color: var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
 }
 
-.masumi-tab .money-rail .rail__track {
-  padding-top: var(--space-6);
-}
-
+/* Whoever acts in the selected step, when it is not the money holder. */
 .masumi-tab .money-rail .rail__node[data-acting="true"][data-state="idle"] {
   border-style: dashed;
-  border-color: var(--signal-line);
+  border-color: var(--act-line);
 }
 
 .masumi-tab .money-rail__state {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2) var(--space-3);
-  max-width: var(--measure);
-  margin-top: var(--space-5);
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--signal-line);
-}
-
-.masumi-tab .money-rail[data-money="collectable"] .money-rail__state {
-  border-left-color: var(--confirmed);
-}
-
-.masumi-tab .money-rail[data-money="unknown"] .money-rail__state {
-  border-left-color: var(--danger);
+  gap: 0 var(--space-3);
+  margin-top: var(--space-3);
 }
 
 .masumi-tab .money-rail__state strong {
   font-family: var(--font-display);
-  font-size: 1.125rem;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
 .masumi-tab .money-rail__source {
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--signal);
+  color: var(--value);
+  font-size: 0.75rem;
 }
 
 .masumi-tab .money-rail__detail {
   flex-basis: 100%;
-  color: var(--mist);
-  font-size: 0.9375rem;
+  color: var(--ink-2);
+  font-size: 0.8125rem;
 }
 
-/* -- step B: agent status, route picker, job input --------------------------*/
+/* -- controls: agent status, route picker, job input --------------------------*/
 
 .masumi-tab .agent-down {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   justify-items: start;
-  padding: var(--space-4);
-  margin-bottom: var(--space-4);
-  border: 1px dashed var(--rule);
-  border-radius: var(--radius-sm);
-  color: var(--mist);
-  font-size: 0.9375rem;
+  padding: var(--space-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
 }
 
 .masumi-tab .agent-down strong {
-  color: var(--paper);
+  color: var(--ink);
 }
 
 .masumi-tab .route-picker {
-  margin: 0 0 var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
   padding: 0;
   border: 0;
   min-width: 0;
@@ -113,75 +130,38 @@
 
 .masumi-tab .route-picker legend {
   margin-bottom: var(--space-2);
-  color: var(--paper);
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .masumi-tab .route-picker__option {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--rule);
-  background: var(--panel);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.masumi-tab .route-picker__option + .route-picker__option {
-  border-top: 0;
-}
-
-.masumi-tab .route-picker__option:first-of-type {
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-}
-
-.masumi-tab .route-picker__option:last-of-type {
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
 .masumi-tab .route-picker__option input {
   flex: none;
-  margin: 0.3rem 0 0;
-  accent-color: var(--signal);
-}
-
-.masumi-tab .route-picker__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  accent-color: var(--act);
 }
 
 .masumi-tab .route-picker__label {
+  flex: 1;
   font-weight: 600;
-  font-size: 0.9375rem;
 }
 
 .masumi-tab .route-picker__price {
-  color: var(--mist);
-}
-
-.masumi-tab .route-picker__note {
-  display: block;
-  margin-top: var(--space-1);
-  color: var(--mist);
-  font-size: 0.8125rem;
-  line-height: 1.55;
+  color: var(--value);
 }
 
 .masumi-tab .route-picker__option[data-selected="true"] {
-  background: var(--signal-soft);
-}
-
-.masumi-tab .route-picker__option[data-selected="true"] .route-picker__label,
-.masumi-tab .route-picker__option[data-selected="true"] .route-picker__price {
-  color: var(--signal);
-}
-
-.masumi-tab .route-picker:not(:disabled) .route-picker__option:hover:not([data-selected="true"]) {
-  background: var(--panel-raised);
+  border-color: var(--act);
+  background: var(--act-soft);
 }
 
 .masumi-tab .route-picker:disabled .route-picker__option {
@@ -191,215 +171,239 @@
 
 .masumi-tab .job-input {
   display: grid;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  gap: var(--space-1);
 }
 
 .masumi-tab .job-input__label {
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.masumi-tab .job-input__hint {
+  color: var(--ink-3);
+  font-weight: 400;
 }
 
 .masumi-tab .job-input textarea {
   width: 100%;
-  min-height: 3.5rem;
-  padding: var(--space-3);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--ink-raised);
-  color: var(--paper);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
   font-family: var(--font-mono);
-  font-size: 0.875rem;
-  resize: vertical;
-}
-
-.masumi-tab .job-input textarea:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 1px;
-}
-
-.masumi-tab .job-input__hint {
-  color: var(--mist-dim);
   font-size: 0.8125rem;
+  resize: vertical;
 }
 
 .masumi-tab .masumi-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  gap: var(--space-2);
 }
 
 .masumi-tab .masumi-actions .btn {
-  margin: 0;
+  flex: 1 1 100%;
 }
 
-/* -- the run: timeline + inspector ------------------------------------------*/
+/* Nodes may shrink and wrap so four parties fit a narrow column. */
+.masumi-tab .money-rail .rail__node {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.masumi-tab .money-rail .rail__node-label {
+  white-space: normal;
+}
+
+.masumi-tab .money-rail .rail__connector {
+  min-width: var(--space-2);
+  margin: 0 var(--space-1);
+}
+
+/* Names only on the strip: the roles are in "About this demo" and the tooltip. */
+.masumi-tab .money-rail .rail__node-role {
+  display: none;
+}
+
+.masumi-tab .masumi-facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .masumi-facts div {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.masumi-tab .masumi-facts dt {
+  min-width: 4.5rem;
+  color: var(--ink-3);
+}
+
+.masumi-tab .masumi-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* -- steps column -------------------------------------------------------------*/
 
 .masumi-tab .masumi-run__intro {
-  display: grid;
-  gap: var(--space-2);
-  margin-bottom: var(--space-6);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .masumi-tab .masumi-run__intro h2 {
-  font-size: clamp(1.5rem, 1vw + 1.2rem, 2rem);
+  font-size: 1.125rem;
 }
 
 .masumi-tab .masumi-run__intro p {
-  max-width: var(--measure);
-  color: var(--mist);
+  flex-basis: 100%;
+  color: var(--ink-3);
+  font-size: 0.8125rem;
 }
 
 .masumi-tab .masumi-run__example {
-  color: var(--signal);
-}
-
-.masumi-tab .masumi-run__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
-  gap: var(--space-6);
-  align-items: start;
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--value-line);
+  border-radius: 999px;
+  color: var(--value);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .masumi-tab .masumi-steps {
-  list-style: none;
+  display: grid;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
+/* The page's .step-card is a two-column grid; here each item is one button. */
 .masumi-tab .masumi-steps .step-card {
-  padding-bottom: var(--space-3);
-}
-
-.masumi-tab .masumi-steps .step-card[data-status="pending"][data-selected="true"] .step-card__body {
-  opacity: 1;
+  display: block;
+  padding: 0;
 }
 
 .masumi-tab .masumi-step {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "index title pill"
+    "index meta  pill";
+  align-items: center;
+  gap: 0 var(--space-3);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
-  margin-top: calc(-1 * var(--space-2));
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
 .masumi-tab .masumi-step:hover {
-  background: var(--panel);
-}
-
-.masumi-tab .masumi-step:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 2px;
+  border-color: var(--line);
 }
 
 .masumi-tab .step-card[data-selected="true"] .masumi-step {
-  background: var(--panel);
-  border-color: var(--rule);
-  box-shadow: inset 2px 0 0 var(--signal);
+  border-color: var(--act);
+  box-shadow: inset 3px 0 0 var(--act);
 }
 
-.masumi-tab .masumi-step .step-card__header {
-  margin: 0;
+.masumi-tab .masumi-step__index {
+  grid-area: index;
+  color: var(--ink-3);
+  font-size: 0.75rem;
 }
 
-.masumi-tab .masumi-step .step-card__label {
+.masumi-tab .step-card[data-status="done"] .masumi-step__index {
+  color: var(--ok);
+}
+
+.masumi-tab .step-card[data-status="active"] .masumi-step__index {
+  color: var(--act);
+}
+
+.masumi-tab .masumi-step__title {
+  grid-area: title;
   font-family: var(--font-display);
-  font-size: 1.125rem;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-.masumi-tab .masumi-step .step-card__wire {
-  margin: 0;
+.masumi-tab .step-card[data-status="pending"]:not([data-selected="true"]) .masumi-step__title {
+  color: var(--ink-2);
 }
 
-.masumi-tab .masumi-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-  margin-top: var(--space-7);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--rule-soft);
-  color: var(--mist);
-  font-size: 0.875rem;
+.masumi-tab .masumi-step__meta {
+  grid-area: meta;
+  color: var(--ink-3);
+  font-size: 0.75rem;
 }
 
-.masumi-tab .masumi-facts .mono-tag {
-  color: var(--paper);
+.masumi-tab .masumi-step .status-pill {
+  grid-area: pill;
 }
 
-.masumi-tab .masumi-facts a.mono-tag {
-  color: var(--signal);
-}
-
-/* -- inspector --------------------------------------------------------------*/
+/* -- inspector ----------------------------------------------------------------*/
 
 .masumi-tab .inspector {
-  position: sticky;
-  top: var(--space-5);
-  max-height: calc(100vh - 2 * var(--space-5));
-  overflow: auto;
-  padding: var(--space-5);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
-  background: var(--ink-raised);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .masumi-tab .inspector:focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .masumi-tab .inspector h2 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   line-height: 1.25;
 }
 
 .masumi-tab .inspector.empty {
   display: grid;
-  gap: var(--space-3);
-  color: var(--mist);
+  gap: var(--space-2);
+  color: var(--ink-2);
 }
 
 .masumi-tab .inspector.empty strong {
-  color: var(--paper);
+  color: var(--ink);
 }
 
 .masumi-tab .inspector-head {
   display: grid;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
 }
 
 .masumi-tab .chip {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--signal);
+  color: var(--act);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .masumi-tab .example-flag {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border: 1px dashed var(--signal-line);
-  border-radius: var(--radius-sm);
-  color: var(--signal);
-  font-size: 0.8125rem;
+  border: 1px dashed var(--value-line);
+  border-radius: var(--radius);
+  color: var(--value);
 }
 
 .masumi-tab .tabs {
   display: flex;
   gap: var(--space-4);
-  margin-bottom: var(--space-4);
-  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
 }
 
 .masumi-tab .tabs button {
@@ -408,19 +412,18 @@
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--mist);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  color: var(--ink-3);
+  font-weight: 600;
   cursor: pointer;
 }
 
 .masumi-tab .tabs button:hover {
-  color: var(--paper);
+  color: var(--ink);
 }
 
 .masumi-tab .tabs button.on {
-  color: var(--signal);
-  border-bottom-color: var(--signal);
+  color: var(--act);
+  border-bottom-color: var(--act);
 }
 
 .masumi-tab .tab-body {
@@ -429,38 +432,34 @@
 }
 
 .masumi-tab .lede {
-  font-size: 0.9375rem;
-  line-height: 1.65;
-  color: var(--paper);
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 .masumi-tab .look-for {
   display: grid;
   gap: var(--space-1);
   padding: var(--space-3);
-  border-left: 2px solid var(--signal-line);
-  background: var(--signal-soft);
-  color: var(--paper);
+  border-left: 2px solid var(--act);
+  background: var(--act-soft);
 }
 
 .masumi-tab .look-for strong {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--signal);
+  color: var(--act);
+  font-size: 0.75rem;
 }
 
 .masumi-tab .muted {
-  color: var(--mist);
+  color: var(--ink-3);
 }
 
 .masumi-tab .small {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 .masumi-tab .error {
-  color: var(--danger);
+  color: var(--bad);
   overflow-wrap: anywhere;
 }
 
@@ -472,7 +471,7 @@
 
 .masumi-tab .v {
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 
@@ -480,21 +479,21 @@
 .masumi-tab .v-time,
 .masumi-tab .v-amount {
   font-family: var(--font-body);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .masumi-tab .v-amount {
-  color: var(--signal);
+  color: var(--value);
   font-weight: 600;
 }
 
 .masumi-tab .v-num,
 .masumi-tab .v-bool {
-  color: var(--confirmed);
+  color: var(--act);
 }
 
 .masumi-tab .v-null {
-  color: var(--mist-dim);
+  color: var(--ink-3);
 }
 
 .masumi-tab .v-hash {
@@ -505,25 +504,24 @@
 }
 
 .masumi-tab .fake {
+  color: var(--value);
   font-family: var(--font-body);
   font-size: 0.6875rem;
-  color: var(--signal);
 }
 
 .masumi-tab .copy {
   padding: 0 0.4rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--mist);
-  font-family: var(--font-mono);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink-3);
   font-size: 0.6875rem;
   cursor: pointer;
 }
 
 .masumi-tab .copy:hover {
-  color: var(--paper);
-  border-color: var(--mist-dim);
+  color: var(--ink);
+  border-color: var(--ink-3);
 }
 
 /* JSON tree */
@@ -534,15 +532,15 @@
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
-  color: var(--mist-dim);
+  color: var(--ink-3);
   font-size: 0.75rem;
 }
 
 .masumi-tab .jt ul {
-  list-style: none;
   margin: 0;
   padding: 0 0 0 var(--space-4);
-  border-left: 1px solid var(--rule-soft);
+  border-left: 1px solid var(--line-soft);
+  list-style: none;
 }
 
 .masumi-tab .jt .jt-root {
@@ -555,55 +553,55 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.1rem var(--space-3);
-  padding: 0.15rem var(--space-1);
+  padding: 0.1rem var(--space-1);
+  border-radius: 4px;
 }
 
 .masumi-tab .jt-leaf:hover {
-  background: var(--panel);
+  background: var(--bg);
 }
 
 .masumi-tab .jt-key {
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--mist);
 }
 
 .masumi-tab .jt-toggle {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.15rem var(--space-1);
+  padding: 0.1rem var(--space-1);
   border: 0;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
 }
 
 .masumi-tab .jt-toggle:hover {
-  background: var(--panel);
+  background: var(--bg);
 }
 
 .masumi-tab .jt-caret {
   width: 0.8rem;
-  color: var(--mist-dim);
+  color: var(--ink-3);
   font-size: 0.75rem;
 }
 
 .masumi-tab .jt-meta {
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  color: var(--mist-dim);
 }
 
 /* escrow datum */
 
 .masumi-tab .dgroup h3 {
-  margin: var(--space-4) 0 var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--signal);
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--act);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .masumi-tab .dgroup dl {
@@ -612,50 +610,47 @@
 
 .masumi-tab .drow {
   display: grid;
-  grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 1.4fr);
-  gap: var(--space-1) var(--space-4);
+  grid-template-columns: minmax(8.5rem, 0.8fr) minmax(0, 1.4fr);
+  gap: var(--space-1) var(--space-3);
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .masumi-tab .drow dt {
   display: grid;
   align-content: start;
-  gap: var(--space-1);
+  gap: 0.1rem;
 }
 
 .masumi-tab .drow dt code {
-  font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--paper);
 }
 
 .masumi-tab .drow dd {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.1rem;
   min-width: 0;
   margin: 0;
 }
 
 .masumi-tab .drow small {
-  color: var(--mist-dim);
+  color: var(--ink-3);
   font-size: 0.75rem;
   line-height: 1.45;
 }
 
 .masumi-tab .by {
   justify-self: start;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--mist);
+  color: var(--ink-3);
+  font-size: 0.6875rem;
 }
 
 .masumi-tab .by-buyer {
-  color: var(--signal);
+  color: var(--value);
 }
 
 .masumi-tab .by-seller {
-  color: var(--confirmed);
+  color: var(--ok);
 }
 
 .masumi-tab .creds {
@@ -672,7 +667,7 @@
 
 .masumi-tab .cred-label {
   min-width: 5.5rem;
-  color: var(--mist-dim);
+  color: var(--ink-3);
   font-size: 0.75rem;
 }
 
@@ -695,7 +690,7 @@
   right: 0;
   top: 1.2rem;
   height: 1px;
-  background: var(--signal-line);
+  background: var(--line);
 }
 
 .masumi-tab .mark {
@@ -704,14 +699,14 @@
   width: 0.65rem;
   height: 0.65rem;
   margin-left: -0.325rem;
+  border: 1.5px solid var(--value);
   border-radius: 50%;
-  border: 1px solid var(--signal);
-  background: var(--ink-raised);
+  background: var(--surface);
 }
 
 .masumi-tab .mark.passed {
-  border-color: var(--confirmed);
-  background: var(--confirmed);
+  border-color: var(--ok);
+  background: var(--ok);
 }
 
 .masumi-tab .now {
@@ -719,22 +714,22 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: var(--paper);
+  background: var(--act);
 }
 
 .masumi-tab .now span {
   position: absolute;
   top: -0.25rem;
   left: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--paper);
+  color: var(--act);
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 
 .masumi-tab .axis-legend {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2) var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -742,11 +737,10 @@
 
 .masumi-tab .axis-legend li {
   display: grid;
-  font-size: 0.8125rem;
 }
 
 .masumi-tab .axis-legend small {
-  color: var(--mist-dim);
+  color: var(--ink-3);
   font-size: 0.75rem;
 }
 
@@ -758,7 +752,7 @@
 
 .masumi-tab .http {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .masumi-tab .http-line {
@@ -766,63 +760,61 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 .masumi-tab .method {
-  font-weight: 700;
-  color: var(--signal);
+  color: var(--act);
+  font-weight: 600;
 }
 
 .masumi-tab .method.m-get {
-  color: var(--confirmed);
+  color: var(--ok);
 }
 
 .masumi-tab .http-path {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  color: var(--paper);
 }
 
 .masumi-tab .status {
-  padding: 0.05rem 0.5rem;
+  padding: 0 0.45rem;
   border: 1px solid currentColor;
   border-radius: 999px;
   font-size: 0.6875rem;
 }
 
 .masumi-tab .s-ok {
-  color: var(--confirmed);
+  color: var(--ok);
 }
 
 .masumi-tab .s-pay {
-  color: var(--signal);
+  color: var(--value);
 }
 
 .masumi-tab .s-warn,
 .masumi-tab .s-wait {
-  color: var(--mist);
+  color: var(--ink-3);
 }
 
 .masumi-tab .s-err {
-  color: var(--danger);
+  color: var(--bad);
 }
 
 .masumi-tab .http-ms {
-  color: var(--mist-dim);
-  font-size: 0.75rem;
+  color: var(--ink-3);
 }
 
 .masumi-tab .http-parts {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .masumi-tab .http-parts.response-first {
@@ -830,21 +822,19 @@
 }
 
 .masumi-tab .http-part h3 {
-  margin: 0 0 var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mist);
+  margin: 0 0 var(--space-1);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .masumi-tab .http-part h4 {
-  margin: var(--space-3) 0 var(--space-1);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--ink-3);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
   font-weight: 500;
-  color: var(--mist-dim);
 }
 
 .masumi-tab .http-headers {
@@ -855,22 +845,21 @@
 
 .masumi-tab .http-headers > div {
   display: grid;
-  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(7.5rem, auto) minmax(0, 1fr);
   gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: 4px;
 }
 
 .masumi-tab .http-headers dt {
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--mist);
 }
 
 .masumi-tab .http-headers dd {
   min-width: 0;
   margin: 0;
-  font-size: 0.8125rem;
 }
 
 .masumi-tab .http-headers .mono {
@@ -879,12 +868,12 @@
 }
 
 .masumi-tab .x402-header {
-  border: 1px solid var(--signal-line);
-  background: var(--signal-soft);
+  border: 1px solid var(--value-line);
+  background: var(--value-soft);
 }
 
 .masumi-tab .x402-header dt {
-  color: var(--signal);
+  color: var(--value);
 }
 
 .masumi-tab .decoded {
@@ -893,7 +882,7 @@
 
 .masumi-tab .decoded summary {
   margin-bottom: var(--space-2);
-  color: var(--mist);
+  color: var(--ink-2);
   font-size: 0.75rem;
   cursor: pointer;
 }
@@ -902,32 +891,19 @@
   margin: 0;
   padding: var(--space-3);
   overflow-x: auto;
-  background: var(--ink);
+  background: var(--sunken);
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   white-space: pre-wrap;
 }
 
-/* -- responsive --------------------------------------------------------------*/
+/* -- small screens ------------------------------------------------------------*/
 
-@media (max-width: 1100px) {
-  .masumi-tab .masumi-run__grid {
-    grid-template-columns: 1fr;
-  }
-
-  .masumi-tab .inspector {
-    position: static;
-    max-height: none;
-  }
-}
-
-@media (max-width: 640px) {
-  /* Every party stays visible: the rail wraps into a grid instead of scrolling. */
+@media (max-width: 720px) {
   .masumi-tab .money-rail .rail__track {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-7) var(--space-3);
-    overflow: visible;
+    gap: var(--space-5) var(--space-2);
   }
 
   .masumi-tab .money-rail .rail__connector {
@@ -942,9 +918,5 @@
   .masumi-tab .http-headers > div,
   .masumi-tab .axis-legend {
     grid-template-columns: 1fr;
-  }
-
-  .masumi-tab .masumi-actions .btn {
-    flex: 1 1 100%;
   }
 }

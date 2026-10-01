@@ -2,6 +2,51 @@
 
 This guide is for developers who want to use this demo as a blueprint for their own Masumi agent. It explains how the pieces fit, what Masumi and Sokosumi expect on the wire and on chain, which invariants protect the seller's money, and what to change for a real agent. The [README](../README.md) covers running it. [FLOWS.md](FLOWS.md) is the step-by-step reference: sequence diagrams, every HTTP request and response, and the anatomy of each transaction.
 
+## Start here
+
+### Glossary
+
+| Term | Meaning |
+|---|---|
+| **x402** | HTTP payment protocol: the server answers `402 Payment Required` with a price, the client repeats the request with a signed payment. See the main demo's [guide](../../docs/x402/guide.md). |
+| **Facilitator** | The x402 component that verifies a signed payment and submits it to the chain. Here it runs inside the agent and holds no keys. |
+| `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE` | The three x402 HTTP headers: the offer, the signed payment, the settlement receipt (each base64 JSON). |
+| **Masumi** | A network for AI agents on Cardano: an on-chain registry plus an escrow contract. |
+| **MIP-003** | Masumi's standard agent HTTP API: `/availability`, `/input_schema`, `/start_job`, `/status`. |
+| **MIP-004** | How input and result hashes are computed (`sha256(identifier;…)`). |
+| **Masumi Payment Service** | Masumi's buyer/seller node software. Sokosumi's payment node runs it. |
+| **Sokosumi / Soko Bot** | Masumi's marketplace and its chat assistant. They hire agents and bill users in credits. |
+| **Registry NFT / `agentIdentifier`** | One NFT per agent (policy ++ asset name, 120 hex). Its metadata is the agent's listing: name, URL, price, escrow. |
+| **`vested_pay`** | Masumi's V2 escrow smart contract. |
+| **Datum** | Data attached to a contract output; the escrow's 19 fields (who, terms, deadlines, state). |
+| **Redeemer** | The action a transaction asks the contract to allow, e.g. `SubmitResult` or `Withdraw`. |
+| **`blockchainIdentifier`** | The seller-signed purchase terms of the standard path, packed into one string. |
+| **Seller / buyer nonce** | Random per-purchase values in the datum; the agent finds a job's lock by its seller nonce. |
+| **Deadlines** | `pay_by_time` → `submit_result_time` → `unlock_time` → `external_dispute_unlock_time`. |
+| **Cooldown** | A wait (7 min on preprod) after a party acts before it may act again; set by SubmitResult. |
+| **`collateral_return_lovelace`** | The buyer's refundable ADA deposit in the escrow output, returned at Withdraw. **Not** the Plutus script collateral of pitfall 8. |
+| **tADA / lovelace** | Test ADA; 1 tADA = 1,000,000 lovelace. |
+| **tUSDM** | Masumi's preprod stablecoin, policy `16a55b2a…`. A different "tUSDM" (policy `e675b46e…`) exists on preprod and does not count here. |
+
+### The two hire paths side by side
+
+| | Standard (MIP-003) | x402 (`masumi` method) |
+|---|---|---|
+| Caller | Sokosumi, or any Payment Service buyer | The main demo's Masumi agent tab, through the demo server |
+| Agent route | `POST /start_job` | `POST /x402/start_job[/ada]` |
+| Terms travel in | the JSON body (`blockchainIdentifier`) | the `PAYMENT-REQUIRED` header (`extra.terms`) |
+| Seller signs | sha256 of the canonical-JSON Payment Service payload | x402 `termsDigest` (domain-separated) |
+| `input_hash` | MIP-004 `sha256(id;JCS(input))` | the library's commitment digest |
+| Lock built by | the buyer's Payment Service node | the buyer's wallet signs; the agent's facilitator broadcasts |
+| Price | registered tUSDM | registered tUSDM, or unlisted tADA (no registry check) |
+| Deadlines, from start | pay-by +15, submit +40, unlock +60, dispute +80 min | pay-by +5, submit ≈ +20, unlock ≈ +40, dispute ≈ +60 min |
+| Agent finds the lock by | an escrow scan, grouped by `seller_nonce` | the outputs of the verified transaction |
+| No result in time | Sokosumi's node refunds 10 min after submit-result | no refund tooling in this demo |
+
+Both paths share the seller key, the escrow, the datum shape, the watcher and `npm run collect`.
+
+### Upstream revisions
+
 Upstream sources are cited as `repo@commit path:lines`. The ports and tests were written against these revisions:
 
 | Repository | Commit |
@@ -18,7 +63,7 @@ Upstream sources are cited as `repo@commit path:lines`. The ports and tests were
 flowchart LR
   subgraph Buyers
     S[Sokosumi / Soko Bot<br/>+ its Masumi Payment Service]
-    U[Main demo, Masumi tab<br/>CIP-30 wallet]
+    U[Main demo, Masumi agent tab<br/>CIP-30 wallet]
     D[Main demo server<br/>/masumi forward + Sokosumi proxy]
   end
   subgraph Agent["agent.ts (one Node process)"]
@@ -253,7 +298,7 @@ It never calls `/availability`; the registry does.
 
 **Hiring via Sokosumi from the UI** (`src/sokosumi.ts`, used by the proxy in the main demo's `server/src/masumi.ts`). With `SOKOSUMI_API_KEY` set, the UI can create a Sokosumi job for the agent. The calls are `GET /v1/agents?kind=cardano` (paged by `meta.pagination.nextCursor`) or `SOKOSUMI_AGENT_ID`, then `GET /v1/agents/{id}/input-schema`, `POST /v1/agents/{id}/jobs` and `GET /v1/jobs/{id}`. All use the user API key as a Bearer token, and responses come wrapped as `{ data, meta }`.
 - **Where it runs.** The key lives only in the demo server, which listens on `127.0.0.1`. The tunnel forwards only the agent port; never expose the demo server.
-- **Which agent.** With the key set, the server requires `SOKOSUMI_AGENT_ID` or the exact `SOKOSUMI_AGENT_NAME` and refuses to start otherwise, so a catalog lookup by a default name cannot hire, and bill, someone else's agent.
+- **Which agent.** With the key set, the server requires `SOKOSUMI_AGENT_ID` (Sokosumi's own UUID, not the Masumi identifier, which it rejects) or the exact `SOKOSUMI_AGENT_NAME`, and refuses to start otherwise. A catalog lookup by a default name therefore cannot hire, and bill, someone else's agent.
 - **Browser defences.** The proxy is mounted before the server's open CORS. It requires a loopback `Host` and client, no forwarding headers, an exact `FRONTEND_ORIGINS` `Origin` (also on GETs), `Sec-Fetch-Mode: cors` when present, and a JSON body (which forces a preflight). So pages open in the operator's browser can't spend credits through DNS rebinding or cross-site posts. One hire runs at a time. `tests/masumi-tab-server.test.ts` covers each rule; [FLOWS.md §4.1](FLOWS.md#41-hire-masumi-tab--demo-server--sokosumi) lists them.
 - **No retries.** The create call is never retried, because a retry would be a second paid job.
 - **Status mapping.** Every Sokosumi job status maps to a UI stage (`sokosumiStage`), and anything unexpected ends polling.
@@ -265,7 +310,7 @@ It never calls `/availability`; the registry does.
 
 | Invariant | Where | Test |
 |---|---|---|
-| A lock is accepted only if **every seller-decided datum field** equals the signed terms. Only `buyer`, `buyer_return_address` and `collateral_return_lovelace` are free, and the latter must be ≤ the UTxO's lovelace. The paid token must be Masumi tUSDM and at least the price. x402 locks must also be the verified tx. This blocks public-nonce spoofs such as a year-2100 cooldown that blocks SubmitResult, a far-future `unlock_time`, or a broken collateral field. | `lockMatch.ts` | `lockMatch.test.ts` (one spoof per field, underpayment, wrong token, a spoof shadowing a genuine lock) |
+| A lock is accepted only if **every seller-decided datum field** equals the signed terms. Only `buyer`, `buyer_return_address` and `collateral_return_lovelace` are free, and the latter must be ≤ the UTxO's lovelace. The paid unit must be the job's price unit and at least the price: Masumi tUSDM, or for the tADA offer the lovelace net of the buyer's deposit. x402 locks must also be the verified tx. This blocks public-nonce spoofs such as a year-2100 cooldown that blocks SubmitResult, a far-future `unlock_time`, or a broken collateral field. | `lockMatch.ts` | `lockMatch.test.ts` (one spoof per field, underpayment, wrong token, a spoof shadowing a genuine lock) |
 | Units compare as `policy ++ name`, whether dotted, concatenated or `lovelace`. The library's own `USDM_PREPROD_ASSET` (`e675b46e…`) is a **different token** and is refused. | `constants.ts` | `masumi.test.ts`, `registry.test.ts` |
 | The registry NFT, the signing key and the datum `seller` are the same credential, and the NFT sits at the **exact** signer address. | `chain.register`, `check-registry` | `standard-path.test.ts` (holder without stake part is rejected) |
 | Escrow transactions are evaluated during `build()`, so nothing is signed if a script would fail and no collateral is forfeited. | `chain.ts` | — (Blockfrost evaluation; verified with aiken simulate) |
@@ -321,7 +366,7 @@ The chain transactions have no unit tests, because they need a node and evaluato
 5. **The cooldown uses slot starts.** The validator sees `slotStart(upper)`, and `seller_cooldown_time` must be ≥ that + 420 000 ms.
 6. **The Withdraw lower bound rounds up.** One slot early is rejected.
 7. **Min-UTxO grows at SubmitResult.** The result hash and a non-zero cooldown add bytes. Let the builder top up lovelace; never change native assets.
-8. **Collateral.** Evolution reserves 5 ADA of collateral by default. Keep a pure-ADA UTxO of at least that in the seller wallet.
+8. **Script collateral.** This is the Plutus script collateral a seller transaction pledges, not the buyer's `collateral_return_lovelace` deposit. Evolution reserves 5 ADA of it by default. Keep a pure-ADA UTxO of at least that in the seller wallet.
 9. **The handler runs before settlement** in `@x402/express`. Never do chain work in an x402 route handler.
 10. **Mesh ESM + libsodium.** `@meshsdk/core-cst`'s ESM entry fails to load `libsodium-wrappers-sumo` under Node. The tests load its CommonJS build via `createRequire`.
 11. **Sokosumi has no Hire button** (ADR-0006/0024). Hires come from Soko Bot, Coworker or `POST /v1/agents/{id}/jobs`.

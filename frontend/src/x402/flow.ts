@@ -16,7 +16,14 @@ export interface PreparedPayment { url: string; headers: Record<string, string>;
 export type FlowOutcome = { status: "settled" } | { status: "failed"; message: string } | {
   status: "pending" | "unknown"; payment: PreparedPayment; message: string; transaction?: string; retryable?: boolean;
 };
-export interface RecoveryOptions { automaticChecks?: number; retryDelayMs?: number }
+export interface RecoveryOptions {
+  automaticChecks?: number;
+  retryDelayMs?: number;
+  /** Keep checking a pending payment until this time (ms since epoch), with growing pauses, even past `automaticChecks`. */
+  checkUntil?: number;
+  /** The longest pause between checks when `checkUntil` is set. */
+  maxRetryDelayMs?: number;
+}
 export interface FlowOptions extends RecoveryOptions { l1Confirmations?: number; asset?: string; amount?: string }
 const paths: Record<PaymentMethod, string> = { default: "/api/message", usdm: "/api/message-usdm" };
 const amounts: Record<PaymentMethod, string> = { default: "2000000", usdm: "100000" };
@@ -62,15 +69,24 @@ async function settleWithRecovery(payment: PreparedPayment, onStep: (step: FlowS
   let outcome = await sendPayment(payment, onStep, resuming);
   let earlierIssue = outcome.status === "unknown" ? outcome.message : undefined;
   let checks = 0;
+  const stillOpen = (current: FlowOutcome): current is Extract<FlowOutcome, { status: "pending" | "unknown" }> =>
+    current.status === "pending" || (current.status === "unknown" && current.retryable === true);
+  // With a deadline, checking continues past the count until the payment is
+  // settled, expired or rejected; the pauses grow so a slow chain is not polled hard.
+  const mayCheck = () => checks < limit || (options.checkUntil !== undefined && Date.now() < options.checkUntil);
+  const pause = () => {
+    const base = options.retryDelayMs ?? 5_000;
+    return options.checkUntil === undefined ? base : Math.min(options.maxRetryDelayMs ?? 30_000, base * 1.5 ** checks);
+  };
   // Serial checks reuse the exact URL and signed bytes. No wallet is available
   // here, and a transport failure never authorizes a replacement payment.
-  while ((outcome.status === "pending" || (outcome.status === "unknown" && outcome.retryable)) && checks < limit) {
-    await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 5_000));
+  while (stillOpen(outcome) && mayCheck()) {
+    await new Promise(resolve => setTimeout(resolve, pause()));
     checks++;
     outcome = await sendPayment(payment, onStep, true);
     if (outcome.status === "unknown") earlierIssue ??= outcome.message;
   }
-  if (checks === limit && limit > 0 && (outcome.status === "pending" || (outcome.status === "unknown" && outcome.retryable))) {
+  if (checks >= limit && checks > 0 && stillOpen(outcome)) {
     return { ...outcome, message: `Automatic checks paused after ${checks} attempts. ${outcome.message}${earlierIssue && earlierIssue !== outcome.message ? ` Earlier check: ${earlierIssue}` : ""}` };
   }
   return outcome;

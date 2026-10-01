@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   resumePaymentFlow,
   runPaymentFlow,
@@ -10,14 +10,21 @@ import {
 import { STEP_COPY, STEP_ORDER, type StepId } from "../lib/stepCopy";
 import type { Actor } from "../lib/actors";
 import type { WalletState } from "../lib/useWallet";
-import type { RailPhase } from "../components/ActorRail";
+import { ActorRail, type RailPhase } from "../components/ActorRail";
 import { Hero } from "../components/Hero";
 import { ControlPanel, type RunState } from "../components/ControlPanel";
 import type { DemoMethod } from "../components/MethodPicker";
 import type { ConfirmationRange } from "../components/SettlementOptions";
-import { Timeline } from "../components/Timeline";
+import { Timeline, TimelinePreview } from "../components/Timeline";
+import { useFollowRun } from "../lib/useFollowRun";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:4021";
+/**
+ * How long the page keeps checking a pending payment on its own. Longer than
+ * the transaction's validity (600 s) plus the facilitator's expiry grace, so a
+ * payment normally ends confirmed or explicitly expired before this runs out.
+ */
+const CHECK_WINDOW_MS = 20 * 60_000;
 
 interface DemoConfig {
   l1Confirmations: number;
@@ -128,6 +135,7 @@ export function TransactionsTab({ wallet, onBusyChange }: { wallet: WalletState;
         asset: selected.asset,
         amount: selected.amount,
         automaticChecks: 3,
+        checkUntil: Date.now() + CHECK_WINDOW_MS,
       });
       applyOutcome(outcome);
     } catch (error) {
@@ -142,7 +150,7 @@ export function TransactionsTab({ wallet, onBusyChange }: { wallet: WalletState;
     setRunState("running");
     setPayStartedAt(Date.now());
     try {
-      applyOutcome(await resumePaymentFlow(uncertain.payment, recordStep, { automaticChecks: 3 }));
+      applyOutcome(await resumePaymentFlow(uncertain.payment, recordStep, { automaticChecks: 3, checkUntil: Date.now() + CHECK_WINDOW_MS }));
     } catch (error) {
       setUncertain((current) =>
         current ? { ...current, message: `Could not check settlement: ${describeError(error)}` } : current,
@@ -159,7 +167,8 @@ export function TransactionsTab({ wallet, onBusyChange }: { wallet: WalletState;
       next[index] = step;
       return next;
     });
-    if (step.id === "pay") setPayStartedAt(Date.now());
+    // Automatic checks re-emit "pay"; the waiting clock keeps counting from the first send.
+    if (step.id === "pay") setPayStartedAt((current) => current ?? Date.now());
   }
 
   function applyOutcome(outcome: FlowOutcome) {
@@ -196,51 +205,63 @@ export function TransactionsTab({ wallet, onBusyChange }: { wallet: WalletState;
     if (runState !== "idle") handleReset();
   }
 
+  const mainRef = useRef<HTMLDivElement>(null);
+  // During a run, keep the newest reached step card in view inside the timeline column.
+  useFollowRun(mainRef, ".timeline > li.step-card:not([data-status='pending'])", runState !== "idle", `${steps.length}:${runState}`);
+
   const selectedMethod = config?.methods.find((candidate) => candidate.id === method);
   const errorStepId: StepId | undefined =
     runState === "error" ? STEP_ORDER.find((id) => !steps.some((step) => step.id === id)) ?? "settled" : undefined;
   const { railPhase, errorActor } = computeRailPhase(steps, runState, errorStepId);
 
   return (
-    <>
-      <Hero railPhase={railPhase} errorActor={errorActor} />
+    <div className="dash dash--two">
+      <aside className="dash__col dash__controls" aria-label="Wallet and payment">
+        <Hero />
 
-      <ControlPanel
-        wallets={wallet.wallets}
-        connecting={wallet.connecting}
-        connection={wallet.connection}
-        connectError={wallet.connectError}
-        onSelectWallet={(key) => void wallet.select(key)}
-        methods={config?.methods ?? []}
-        method={method}
-        onMethodChange={handleMethodChange}
-        runState={runState}
-        onBegin={handleBegin}
-        onResume={handleResume}
-        onReset={handleReset}
-        l1Confirmations={config?.l1Confirmations ?? null}
-        confirmationRange={config?.facilitator.l1Confirmations ?? null}
-        onConfirmationsChange={handleConfirmationsChange}
-        configLoading={configLoading}
-        configError={configError}
-        onRetryConfig={loadConfig}
-        settlementSyncing={configSyncing}
-        settlementError={configSyncError}
-        uncertainMessage={uncertain?.message}
-        uncertainTransaction={uncertain?.transaction}
-      />
-
-      {(steps.length > 0 || runState !== "idle") && selectedMethod && (
-        <Timeline
-          steps={steps}
-          method={selectedMethod}
+        <ControlPanel
+          wallets={wallet.wallets}
+          connecting={wallet.connecting}
+          connection={wallet.connection}
+          connectError={wallet.connectError}
+          onSelectWallet={(key) => void wallet.select(key)}
+          methods={config?.methods ?? []}
+          method={method}
+          onMethodChange={handleMethodChange}
           runState={runState}
-          errorStepId={errorStepId}
-          errorMessage={errorMessage}
-          payStartedAt={payStartedAt}
+          onBegin={handleBegin}
+          onResume={handleResume}
+          onReset={handleReset}
+          l1Confirmations={config?.l1Confirmations ?? null}
+          confirmationRange={config?.facilitator.l1Confirmations ?? null}
+          onConfirmationsChange={handleConfirmationsChange}
+          configLoading={configLoading}
+          configError={configError}
+          onRetryConfig={loadConfig}
+          settlementSyncing={configSyncing}
+          settlementError={configSyncError}
+          uncertainMessage={uncertain?.message}
+          uncertainTransaction={uncertain?.transaction}
         />
-      )}
-    </>
+      </aside>
+
+      <section className="dash__col dash__main dash__main--split" aria-label="Protocol run">
+        <ActorRail phase={railPhase} errorActor={errorActor} />
+        <div className="dash__scroll" ref={mainRef}>
+        {(steps.length > 0 || runState !== "idle") && selectedMethod && (
+          <Timeline
+            steps={steps}
+            method={selectedMethod}
+            runState={runState}
+            errorStepId={errorStepId}
+            errorMessage={errorMessage}
+            payStartedAt={payStartedAt}
+          />
+        )}
+        {!(steps.length > 0 || runState !== "idle") && <TimelinePreview />}
+        </div>
+      </section>
+    </div>
   );
 }
 

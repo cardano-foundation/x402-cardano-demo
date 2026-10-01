@@ -6,7 +6,10 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { formatTusdm } from "../../../masumi/src/constants.js";
+import { About } from "../components/About";
+import { ColumnResizer } from "../components/ColumnResizer";
 import { WalletPicker } from "../components/WalletPicker";
+import { useFollowRun } from "../lib/useFollowRun";
 import type { WalletState } from "../lib/useWallet";
 import { createCip30Signer } from "../masumi/cip30Signer";
 import { EXAMPLE_OFFER, exampleDeps } from "../masumi/example";
@@ -66,6 +69,9 @@ export function MasumiTab({ wallet, onBusyChange }: { wallet: WalletState; onBus
   const pinned = useRef(false);
   const runs = useRef(createRuns()).current;
   const stepList = useRef<HTMLOListElement>(null);
+  const stepsColumn = useRef<HTMLDivElement>(null);
+  const dashRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
 
   function loadAgent() {
     setReachable(undefined);
@@ -242,52 +248,51 @@ export function MasumiTab({ wallet, onBusyChange }: { wallet: WalletState; onBus
   const canRun = busy !== "real" && Boolean(config) && Boolean(text.trim()) && (viaSokosumi || (Boolean(wallet.connection) && Boolean(offer)));
   const via = subject?.via ?? (viaSokosumi ? "sokosumi" : "x402");
   const amount = subject?.amount ?? (viaSokosumi ? "tUSDM" : offer ? price(offer) : price(EXAMPLE_OFFER));
+  // During a run, keep the newest reached step in view inside the steps column.
+  useFollowRun(stepsColumn, ".masumi-steps > li.step-card:not([data-status='pending'])", steps.length > 0, steps.map(s => s.status).join());
 
   return (
     <ExampleContext.Provider value={example}>
-      <div className="masumi-tab">
-        <header className="hero">
-          <div className="hero__intro">
-            <p className="eyebrow">Masumi agent payments · live on cardano preprod</p>
-            <h1 className="hero__headline">
-              Hire an agent.
-              <br />
-              The money waits in escrow.
-            </h1>
-            <p className="hero__subhead">
-              <strong>Masumi</strong> lists AI agents on Cardano and pays them through an escrow contract. The price is
-              locked when the job starts, and the agent can only collect after it has put proof of the result on chain.
-              Pay over <strong>x402</strong> with your wallet, or hire through <strong>Sokosumi</strong> with credits.
+      <div className="dash dash--three masumi-tab" ref={dashRef}>
+        <aside className="dash__col dash__controls" aria-label="Wallet and hire">
+          <header className="intro">
+            <h1 className="intro__headline">Hire an agent. The money waits in escrow.</h1>
+            <p className="intro__note">
+              Pay from a buyer wallet, not the seller&rsquo;s. Test tokens: tADA (<a href="https://docs.cardano.org/cardano-testnets/tools/faucet/" target="_blank" rel="noreferrer">faucet ↗</a>)
+              and Masumi tUSDM (<a href="https://dispenser.masumi.network/" target="_blank" rel="noreferrer">dispenser ↗</a>,
+              policy <span className="mono-tag">16a55b2a…</span>; preprod has a second tUSDM that does not count).
             </p>
-            <p className="hero__note">
-              Test tokens only. tADA from the{" "}
-              <a href="https://docs.cardano.org/cardano-testnets/tools/faucet/" target="_blank" rel="noreferrer">preprod faucet ↗</a>,
-              Masumi tUSDM from the{" "}
-              <a href="https://dispenser.masumi.network/" target="_blank" rel="noreferrer">Masumi dispenser ↗</a>{" "}
-              (policy <span className="mono-tag">16a55b2a…</span>; preprod has a second tUSDM that does not count).
-            </p>
-          </div>
+            <About>
+              <p>
+                <strong>Masumi</strong> lists AI agents on Cardano and pays them through an escrow contract. The price is
+                locked when the job starts, and the agent can only collect after it has put proof of the result on chain.
+                Pay over <strong>x402</strong> with your wallet, or hire through <strong>Sokosumi</strong> with credits.
+              </p>
+              <ul className="legend">
+                {routes.map(route => (
+                  <li key={route.id} className="legend__item">
+                    <span className="legend__label">{route.label}</span>
+                    <span className="legend__blurb">{route.note}</span>
+                  </li>
+                ))}
+              </ul>
+              <ul className="legend">
+                {[...STATIONS[via], "registry" as const].map(actor => (
+                  <li key={actor} className="legend__item">
+                    <span className="legend__label">{ACTORS[actor].name}</span>
+                    <span className="legend__blurb">{ACTORS[actor].role}</span>
+                  </li>
+                ))}
+              </ul>
+            </About>
+          </header>
 
-          <MoneyRail via={via} active={activeActor} money={money.state} unlockTime={money.unlockTime} amount={amount} />
-
-          <ul className="actor-legend">
-            {[...STATIONS[via].filter(actor => actor !== "facilitator"), "registry" as const].map(actor => (
-              <li key={actor} className="actor-legend__item">
-                <span className="actor-legend__label">{ACTORS[actor].name}</span>
-                <span className="actor-legend__blurb">{ACTORS[actor].role}</span>
-              </li>
-            ))}
-          </ul>
-        </header>
-
-        <section className="control-panel" aria-label="Connect a wallet and hire the agent">
-          <div className="control-panel__step">
-            <span className="control-panel__step-label mono-tag">Step A</span>
-            <h2>Connect a wallet</h2>
-            {viaSokosumi ? (
-              <p className="control-panel__hint">Not needed for Sokosumi: it pays from its own wallet and bills your credits.</p>
-            ) : (
-              <>
+          <section className="control-panel" aria-label="Connect a wallet and hire the agent">
+            <div className="control-panel__step">
+              <h2 className="section-title"><span className="section-title__n">1</span>Connect a wallet</h2>
+              {viaSokosumi ? (
+                <p className="control-panel__hint">Not needed for Sokosumi: it pays from its own wallet and bills your credits.</p>
+              ) : (
                 <WalletPicker
                   wallets={wallet.wallets}
                   connecting={wallet.connecting}
@@ -296,122 +301,115 @@ export function MasumiTab({ wallet, onBusyChange }: { wallet: WalletState; onBus
                   onSelect={key => void wallet.select(key)}
                   disabled={busy === "real"}
                 />
-                <p className="control-panel__hint control-panel__hint--muted">
-                  Use a buyer wallet that is not the agent's seller wallet. It needs tADA for fees
-                  {offer?.asset !== "lovelace" ? " and Masumi tUSDM for the price" : ""}.
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="control-panel__divider" aria-hidden="true" />
-
-          <div className="control-panel__step">
-            <span className="control-panel__step-label mono-tag">Step B</span>
-            <h2>Hire the agent</h2>
-
-            {reachable === false || (reachable && !config) ? (
-              <div className="agent-down" role="status">
-                <p><strong>The agent isn't reachable.</strong> Start it from <span className="mono-tag">masumi/</span> with{" "}
-                  <span className="mono-tag">npm run agent</span>, then check again. The example replay below works without it.</p>
-                <button type="button" className="btn btn--ghost" onClick={loadAgent}>Check again</button>
-              </div>
-            ) : reachable === undefined ? (
-              <p className="control-panel__hint" role="status">Looking for the agent…</p>
-            ) : (
-              <fieldset className="route-picker" disabled={busy === "real"}>
-                <legend>How to pay</legend>
-                {routes.map(route => (
-                  <label key={route.id} className="route-picker__option" data-selected={route.id === chosen}>
-                    <input type="radio" name="masumi-route" checked={route.id === chosen}
-                      onChange={() => { setPath(route.id); setError(undefined); if (!busy) resetIdle(); }} />
-                    <span>
-                      <span className="route-picker__head">
-                        <span className="route-picker__label">{route.label}</span>
-                        <span className="route-picker__price mono-tag">{route.price}</span>
-                      </span>
-                      <span className="route-picker__note">{route.note}</span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-            )}
-
-            <label className="job-input">
-              <span className="job-input__label">Job input</span>
-              <textarea value={text} maxLength={500} rows={2} onChange={e => setText(e.target.value)} disabled={busy === "real"} />
-              <span className="job-input__hint">The agent reverses and upper-cases it.</span>
-            </label>
-
-            <div className="masumi-actions">
-              <button type="button" className="btn btn--primary" onClick={run} disabled={!canRun}>
-                {busy === "real" ? "Running…" : viaSokosumi ? "Hire via Sokosumi" : `Pay ${offer ? price(offer) : ""} and run`}
-              </button>
-              <button type="button" className="btn btn--ghost" onClick={replay} disabled={busy === "real"}>
-                {busy === "example" ? "Replaying…" : "Replay an example"}
-              </button>
+              )}
             </div>
-            {!viaSokosumi && config && !wallet.connection && <p className="control-panel__hint control-panel__hint--muted">Connect a preprod wallet first.</p>}
-            <p className="control-panel__hint control-panel__hint--muted">The example runs the real flow code against a simulated agent and wallet. No money moves.</p>
-            {error && <div className="error-note" role="alert"><p className="error-note__message">{error}</p></div>}
-          </div>
-        </section>
 
-        <section className="masumi-run" aria-labelledby="masumi-steps-heading">
+            <div className="control-panel__step">
+              <h2 className="section-title"><span className="section-title__n">2</span>Hire the agent</h2>
+
+              {reachable === false || (reachable && !config) ? (
+                <div className="agent-down" role="status">
+                  <p><strong>The agent isn't reachable.</strong> Start it from <span className="mono-tag">masumi/</span> with{" "}
+                    <span className="mono-tag">npm run agent</span>, then check again. The example replay below works without it.</p>
+                  <button type="button" className="btn btn--ghost" onClick={loadAgent}>Check again</button>
+                </div>
+              ) : reachable === undefined ? (
+                <p className="control-panel__hint" role="status">Looking for the agent…</p>
+              ) : (
+                <fieldset className="route-picker" disabled={busy === "real"}>
+                  <legend>How to pay</legend>
+                  {routes.map(route => (
+                    <label key={route.id} className="route-picker__option" data-selected={route.id === chosen} title={route.note}>
+                      <input type="radio" name="masumi-route" checked={route.id === chosen} aria-describedby={`route-note-${route.id.replace(/\W/g, "")}`}
+                        onChange={() => { setPath(route.id); setError(undefined); if (!busy) resetIdle(); }} />
+                      <span className="route-picker__label">{route.label}</span>
+                      <span className="route-picker__price mono-tag">{route.price}</span>
+                    </label>
+                  ))}
+                  {/* Each route's note, read as the radio's description (the label is its name). */}
+                  {routes.map(route => (
+                    <span key={route.id} className="visually-hidden" id={`route-note-${route.id.replace(/\W/g, "")}`}>{route.note}</span>
+                  ))}
+                </fieldset>
+              )}
+
+              <label className="job-input">
+                <span className="job-input__label">Job input <span className="job-input__hint">reversed and upper-cased by the agent</span></span>
+                <textarea value={text} maxLength={500} rows={1} onChange={e => setText(e.target.value)} disabled={busy === "real"} />
+              </label>
+
+              <p className="control-panel__hint control-panel__hint--muted">The example runs the real flow against a simulated agent and wallet; no money moves.</p>
+              {error && <div className="error-note" role="alert"><p className="error-note__message">{error}</p></div>}
+
+              {/* The actions stay in view at the bottom of the controls column. */}
+              <div className="action-bar">
+                <div className="masumi-actions">
+                  <button type="button" className="btn btn--primary" onClick={run} disabled={!canRun}>
+                    {busy === "real" ? "Running…" : viaSokosumi ? "Hire via Sokosumi" : `Pay ${offer ? price(offer) : ""} and run`}
+                  </button>
+                  <button type="button" className="btn btn--ghost" onClick={replay} disabled={busy === "real"}>
+                    {busy === "example" ? "Replaying…" : "Replay an example"}
+                  </button>
+                </div>
+                {!viaSokosumi && config && !wallet.connection && <p className="control-panel__hint control-panel__hint--muted">Connect a preprod wallet first.</p>}
+              </div>
+            </div>
+          </section>
+
+          {config && (
+            <dl className="masumi-facts">
+              <div><dt>Agent</dt><dd className="mono-tag" title={config.agentIdentifier}>{config.agentIdentifier.slice(0, 14)}…{config.agentIdentifier.slice(-8)}</dd></div>
+              <div><dt>Escrow</dt><dd><a className="mono-tag" href={`https://preprod.cardanoscan.io/address/${config.escrowAddress}`} target="_blank" rel="noreferrer">{config.escrowAddress.slice(0, 14)}…{config.escrowAddress.slice(-6)}</a></dd></div>
+              <div><dt>Reference</dt><dd className="mono-tag">masumi/docs/FLOWS.md</dd></div>
+            </dl>
+          )}
+        </aside>
+
+        <section className="dash__col dash__main dash__main--split masumi-run" aria-labelledby="masumi-steps-heading">
+          <MoneyRail via={via} active={activeActor} money={money.state} unlockTime={money.unlockTime} amount={amount} />
           <div className="masumi-run__intro">
             <h2 id="masumi-steps-heading">
               {COUNT[shown.length] ?? shown.length} steps, {via === "sokosumi" ? "from a Sokosumi hire to escrow" : "from a 402 offer to escrow"}
             </h2>
-            <p>
-              Select a step to inspect who acts, the HTTP exchange and the escrow datum it produced. <span className="mono-tag">↑ ↓</span> move between steps.
-              {example && <span className="masumi-run__example mono-tag"> example run: simulated, no money moves</span>}
-            </p>
+            {example && <span className="masumi-run__example">example run: simulated, no money moves</span>}
+            <p>Select a step to inspect it. <span className="mono-tag">↑ ↓</span> move between steps.</p>
           </div>
           <p className="visually-hidden" aria-live="polite">{announcement}</p>
           {realFailure && (example || !steps.length) && (
             <div className="error-note" role="alert"><p className="error-note__message">Your last real run stopped: {realFailure}</p></div>
           )}
-
-          <div className="masumi-run__grid">
-            <ol ref={stepList} className="timeline masumi-steps" onKeyDown={onTimelineKey}>
-              {shown.map((step, i) => {
-                const status = STATUS[step.status];
-                const isSelected = step.id === selected;
-                return (
-                  <li key={step.id} className="step-card" data-status={status} data-selected={isSelected}>
-                    <div className="step-card__rail">
-                      <span className="step-card__index mono-tag">{String(i + 1).padStart(2, "0")}</span>
-                      <span className="step-card__stem" aria-hidden="true" />
-                    </div>
-                    <div className="step-card__body">
-                      <button type="button" className="masumi-step" onClick={() => choose(step.id)} aria-current={isSelected ? "step" : undefined}>
-                        <span className="step-card__header">
-                          <span className="step-card__label">{step.title}</span>
-                          <span className="status-pill" data-status={status}>
-                            <span className="status-pill__dot" aria-hidden="true" />
-                            {STATUS_LABEL[status]}
-                          </span>
-                        </span>
-                        <span className="step-card__wire mono-tag">
-                          {ACTORS[step.actor].name}{step.endedAt || busy ? ` · ${seconds(step, now)}` : ""}
-                        </span>
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-            <Inspector step={selectedStep} now={now} http={selectedStep ? http[selectedStep.id] : undefined} />
+          <div className="dash__scroll" ref={stepsColumn}>
+          <ol ref={stepList} className="masumi-steps" onKeyDown={onTimelineKey}>
+            {shown.map((step, i) => {
+              const status = STATUS[step.status];
+              const isSelected = step.id === selected;
+              return (
+                <li key={step.id} className="step-card" data-status={status} data-selected={isSelected}>
+                  <button type="button" className="masumi-step" onClick={() => choose(step.id)} aria-current={isSelected ? "step" : undefined}>
+                    <span className="masumi-step__index mono-tag">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="masumi-step__title">{step.title}</span>
+                    <span className="masumi-step__meta">
+                      {ACTORS[step.actor].name}{step.endedAt || busy ? ` · ${seconds(step, now)}` : ""}
+                    </span>
+                    <span className="status-pill" data-status={status}>
+                      <span className="status-pill__dot" aria-hidden="true" />
+                      {STATUS_LABEL[status]}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
           </div>
         </section>
 
-        {config && (
-          <p className="masumi-facts">
-            <span>Agent <span className="mono-tag" title={config.agentIdentifier}>{config.agentIdentifier.slice(0, 14)}…{config.agentIdentifier.slice(-8)}</span></span>
-            <span>Escrow <a className="mono-tag" href={`https://preprod.cardanoscan.io/address/${config.escrowAddress}`} target="_blank" rel="noreferrer">{config.escrowAddress.slice(0, 14)}…{config.escrowAddress.slice(-6)}</a></span>
-            <span>Protocol reference <span className="mono-tag">masumi/docs/FLOWS.md</span></span>
-          </p>
-        )}
+        {/* Drag (or arrow keys) to give the inspector more or less room. */}
+        <ColumnResizer grid={dashRef} column={detailRef} min={360} reserved={300 + 380 + 6}
+          storageKey="masumi-inspector-width" label="Resize the step inspector" />
+
+        <aside className="dash__col dash__detail" ref={detailRef} aria-label="Step inspector">
+          <Inspector step={selectedStep} now={now} http={selectedStep ? http[selectedStep.id] : undefined} />
+        </aside>
       </div>
     </ExampleContext.Provider>
   );

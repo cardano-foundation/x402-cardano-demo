@@ -55,7 +55,7 @@ export function MoneyRail({ via, active, money, unlockTime, amount }: {
         {stations.map((actor, i) => (
           <div key={actor} className="rail__segment" data-last={i === stations.length - 1}>
             {/* "acting" marks who is busy in the selected step; only the money holder is lit. */}
-            <div className="rail__node" data-state={nodeState(i)} data-acting={actor === active || undefined}>
+            <div className="rail__node" data-state={nodeState(i)} data-acting={actor === active || undefined} title={ROLE[actor]}>
               {(i === at || (state === "unknown" && i === escrow)) && (
                 <span className="money-rail__amount mono-tag">{state === "unknown" ? "?" : amount}</span>
               )}

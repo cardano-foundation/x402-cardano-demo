@@ -55,6 +55,10 @@ export function masumiOptionsFromEnv(env: Record<string, string | undefined>): M
   const apiKey = env.SOKOSUMI_API_KEY?.trim();
   if (!apiKey) return { agentUrl: agentUrl.replace(/\/+$/, ""), frontendOrigins };
   const agentId = env.SOKOSUMI_AGENT_ID?.trim() || undefined;
+  // A common mix-up: the Masumi registry id (policy ++ asset name, 120 hex) is not Sokosumi's id.
+  if (agentId && /^[0-9a-f]{120}$/i.test(agentId)) {
+    throw new Error("SOKOSUMI_AGENT_ID holds a Masumi registry identifier. Set Sokosumi's own agent id (a UUID such as 01a0f73f-…, from the agent's Sokosumi page or GET /v1/agents), or unset it and use SOKOSUMI_AGENT_NAME.");
+  }
   const agentName = env.SOKOSUMI_AGENT_NAME?.trim() || undefined;
   // A catalog lookup by a default name could match someone else's agent and spend these credits on it.
   if (!agentId && !agentName) throw new Error("With SOKOSUMI_API_KEY set, also set SOKOSUMI_AGENT_ID (preferred) or SOKOSUMI_AGENT_NAME (your agent's exact name).");

@@ -130,25 +130,35 @@ for (const mode of ["mainnet", "reject"] as const) {
   });
 }
 
-test("pending settlement locks controls and resumes the identical signed payment", async ({ page, backend }) => {
+// Changed 2026-10-01 with the user's decision "keep checking until done": a
+// pending payment no longer pauses after three checks; the page keeps checking
+// the identical signed payment and finishes step 05 on its own.
+test("pending settlement locks controls and finishes by itself with the identical signed payment", async ({ page, backend }) => {
+  test.setTimeout(150_000);
   backend.state.confirmations = -1;
   await openDemo(page, backend);
   await connect(page);
+  const pending = page.waitForResponse(response => response.status() === 402 && !!response.headers()["payment-response"]);
   await page.getByRole("button", { name: "Pay 2 tADA" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
+  await pending;
   await expectLockedPayment(page);
-  await expect(page.locator(".timeline > li.step-card").last()).toContainText("Check needed");
-  await expect(page.getByText(/Automatic checks paused/)).toBeVisible();
+  await expect(page.locator(".timeline > li.step-card").last()).toContainText("In progress");
+  await expect(page.getByRole("button", { name: "Check this payment again" })).toHaveCount(0);
+  await expect(page.getByText("Settlement needs another check", { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })))).toBe(true);
   expect(backend.state.builds).toBe(1);
   expect(backend.state.broadcasts).toBe(1);
+  // Past the old limit of three automatic checks the page is still checking, not paused.
+  await expect.poll(() => backend.paymentHeaders.length, { timeout: 60_000 }).toBeGreaterThanOrEqual(5);
+  await expect(page.getByRole("button", { name: "Check this payment again" })).toHaveCount(0);
+  await expect(page.locator(".timeline > li.step-card").last()).toContainText("In progress");
+  const sent = backend.paymentHeaders.length;
   backend.state.confirmations = 1;
-  await page.getByRole("button", { name: "Check this payment again" }).click();
-  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible({ timeout: 45_000 });
   expect(await page.evaluate(() => !window.dispatchEvent(new Event("beforeunload", { cancelable: true })))).toBe(false);
   expect(backend.state.builds).toBe(1);
   expect(backend.state.broadcasts).toBe(1);
-  expect(backend.paymentHeaders).toHaveLength(5);
+  expect(backend.paymentHeaders).toHaveLength(sent + 1);
   expect(new Set(backend.paymentHeaders).size).toBe(1);
   await expect(page.locator(".timeline > li.step-card")).toHaveCount(5);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -195,19 +205,24 @@ test("mempool-only acceptance is visibly distinct from on-chain confirmation", a
   expect(backend.state.broadcasts).toBe(1);
 });
 
+// Changed 2026-10-01 with the user's decision "keep checking until done":
+// pending no longer pauses by itself, so the rejection now arrives on one of
+// the automatic checks instead of after a manual "Check this payment again".
 test("a rejected check explains the verification error and preserves recovery", async ({ page, backend }) => {
   backend.state.confirmations = -1;
-  await openDemo(page, backend);
-  await connect(page);
-  await page.getByRole("button", { name: "Pay 2 tADA" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
   // A verifier rejection (for example after a server restart) must still be
   // explained without discarding a transaction that may already be submitted.
-  let rejectCheck = true;
+  let rejectCheck = false;
   await page.route("**/api/message?*", route => rejectCheck
     ? route.fulfill({ status: 402, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "PAYMENT-REQUIRED", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: route.request().url() }, error: "invalid_exact_cardano_payload_nonce_not_on_chain", accepts: [] }) }, body: "{}" })
     : route.continue());
-  await page.getByRole("button", { name: "Check this payment again" }).click();
+  await openDemo(page, backend);
+  await connect(page);
+  const pending = page.waitForResponse(response => response.status() === 402 && !!response.headers()["payment-response"]);
+  await page.getByRole("button", { name: "Pay 2 tADA" }).click();
+  await pending;
+  rejectCheck = true;
+  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
   await expect(page.getByText(/The server rejected this payment check:.*nonce_not_on_chain/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Start a new payment" })).toHaveCount(0);
   rejectCheck = false;
