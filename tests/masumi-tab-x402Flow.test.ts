@@ -5,9 +5,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from "@x402/core/http";
-import { ESCROW_ADDRESS, TUSDM_X402_ASSET } from "../src/constants.js";
-import { runX402, type Offer, type X402Deps, type X402StepId } from "../src/ui/x402Flow.js";
-import type { Step } from "../src/ui/steps.js";
+import { ESCROW_ADDRESS, TUSDM_X402_ASSET } from "../masumi/src/constants.ts";
+import { runX402, type Offer, type X402Deps, type X402StepId } from "../frontend/src/masumi/x402Flow.ts";
+import type { Step } from "../frontend/src/masumi/steps.ts";
 
 const ada: Offer = { path: "/x402/start_job/ada", amount: "5000000", asset: "lovelace", resource: "http://agent/x402/start_job/ada", registered: false };
 const accept = (asset: string, amount: string) => ({

@@ -103,6 +103,6 @@ export async function providerFixture(t: FixtureCleanup, options: { buyerIsSelle
     });
   }
   const facilitatorUrl = await listen(facilitatorApp, t);
-  const app = await createResourceApp({ facilitator: new HTTPFacilitatorClient({ url: facilitatorUrl }), payTo: seller.sellerAddress, masumiSeller: seller });
+  const app = await createResourceApp({ facilitator: new HTTPFacilitatorClient({ url: facilitatorUrl }), payTo: seller.sellerAddress });
   return { state, signer, api, provider, payer, origin: await listen(app, t) };
 }

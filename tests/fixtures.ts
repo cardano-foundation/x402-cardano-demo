@@ -1,5 +1,5 @@
 import { Address, Assets, Client, Credential, preprod, Transaction, TransactionHash, UTxO } from "@evolution-sdk/evolution";
-import { buildMasumiLock, decodeCardanoTransaction, parseAssetUnit, toMasumiSellerSigner, validateMasumiExtra, type CardanoUtxoSnapshot, type ClientCardanoSigner, type FacilitatorCardanoSigner } from "@x402/cardano";
+import { decodeCardanoTransaction, parseAssetUnit, toMasumiSellerSigner, type CardanoUtxoSnapshot, type ClientCardanoSigner, type FacilitatorCardanoSigner } from "@x402/cardano";
 
 // Public test phrases and fictional inputs. These tests never contact a chain.
 const BUYER = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -31,18 +31,9 @@ export async function createFixture() {
       const funding = token ? Assets.addByHex(Assets.fromLovelace(100_000_000n), token.policyId, token.assetNameHex, amount) : Assets.fromLovelace(100_000_000n);
       const utxo = new UTxO.UTxO({ transactionId: TransactionHash.fromHex(nonce.split("#")[0]), index: 0n, address, assets: funding, datumOption: undefined, scriptRef: undefined });
       inputs.set(nonce, { exists: true, address: payer, coin: funding.lovelace, assets: token ? { [input.asset]: amount } : {}, paymentKeyHash: Credential.toHex(Address.getPaymentCredential(Address.toHex(address))!) });
-      let output = token ? Assets.addByHex(Assets.zero, token.policyId, token.assetNameHex, amount) : Assets.fromLovelace(amount);
-      let datum;
-      let ttl = BigInt(Date.now() + (input.maxTimeoutSeconds - 20) * 1000);
-      if (input.extra?.assetTransferMethod === "masumi") {
-        const schema = validateMasumiExtra(input.extra, input.network);
-        if (!schema.ok) throw new Error(schema.detail);
-        const lock = buildMasumiLock(schema.extra, payer, input.asset, amount, 4310n);
-        datum = lock.datum;
-        output = token ? Assets.addByHex(Assets.fromLovelace(lock.lockedLovelace), token.policyId, token.assetNameHex, amount) : Assets.fromLovelace(lock.lockedLovelace);
-        ttl = BigInt(schema.extra.terms.payByTime) - 1000n;
-      }
-      const built = await wallet.newTx().collectFrom({ inputs: [utxo] }).payToAddress({ address: Address.fromBech32(input.payTo), assets: output, ...(datum ? { datum } : {}) }).setValidity({ to: ttl }).build({ availableUtxos: [utxo], changeAddress: address, fullProtocolParameters: protocolParameters, autoMinUtxo: Boolean(token && !datum) });
+      const output = token ? Assets.addByHex(Assets.zero, token.policyId, token.assetNameHex, amount) : Assets.fromLovelace(amount);
+      const ttl = BigInt(Date.now() + (input.maxTimeoutSeconds - 20) * 1000);
+      const built = await wallet.newTx().collectFrom({ inputs: [utxo] }).payToAddress({ address: Address.fromBech32(input.payTo), assets: output }).setValidity({ to: ttl }).build({ availableUtxos: [utxo], changeAddress: address, fullProtocolParameters: protocolParameters, autoMinUtxo: Boolean(token) });
       const unsigned = await built.toTransaction();
       const signed = await built.sign();
       const tx = new Transaction.Transaction({ body: unsigned.body, witnessSet: signed.witnessSet, isValid: true, auxiliaryData: unsigned.auxiliaryData });

@@ -1,8 +1,9 @@
 /**
  * A minimal Sokosumi API client for hiring this agent with Sokosumi credits.
  * Sokosumi then calls our MIP-003 `start_job` and its payment node locks the
- * funds, exactly as a Soko Bot hire would. Used only by the operator proxy in
- * agent.ts; the API key never reaches the browser.
+ * funds, exactly as a Soko Bot hire would. The agent does not use it: the main
+ * demo's server (../server/src/masumi.ts) runs the hire proxy with it, and the
+ * Masumi tab uses `sokosumiStage`. The API key never reaches the browser.
  */
 export type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) =>
   Promise<{ ok: boolean; status: number; json(): Promise<unknown>; text(): Promise<string> }>;

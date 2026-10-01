@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { buildMasumiLockDatum, parseMasumiLockDatum, toMasumiSellerSigner } from "@x402/cardano";
-import { datumRows, displayable, updateStep, type Step } from "../src/ui/steps.js";
+import { datumRows, displayable, updateStep, type Step } from "../frontend/src/masumi/steps.ts";
 
 test("displayable turns bigints into strings, recursively, without touching other values", () => {
   assert.deepEqual(displayable({ a: 1n, b: [2n, "x", { c: 3n }], d: null, e: true }), { a: "1", b: ["2", "x", { c: "3" }], d: null, e: true });

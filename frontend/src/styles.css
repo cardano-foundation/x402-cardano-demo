@@ -230,6 +230,74 @@ img {
 }
 
 /* ==========================================================================
+   Demo tabs
+   ========================================================================== */
+
+.tab-nav {
+  margin: calc(-1 * var(--space-5)) 0 var(--space-8);
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.tab-nav__list {
+  display: flex;
+  gap: var(--space-7);
+}
+
+.tab-nav__tab {
+  display: grid;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-4);
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.tab-nav__label {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--mist);
+  transition: color 0.2s ease;
+}
+
+.tab-nav__detail {
+  font-size: 0.8125rem;
+  color: var(--mist-dim);
+}
+
+.tab-nav__tab:hover:not(:disabled) .tab-nav__label {
+  color: var(--paper);
+}
+
+.tab-nav__tab[aria-selected="true"] {
+  border-bottom-color: var(--signal);
+}
+
+.tab-nav__tab[aria-selected="true"] .tab-nav__label {
+  color: var(--paper);
+}
+
+.tab-nav__tab:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 4px;
+}
+
+.tab-nav__tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tab-nav__lock {
+  padding: var(--space-2) 0;
+  color: var(--signal);
+  font-size: 0.8125rem;
+}
+
+/* ==========================================================================
    Hero
    ========================================================================== */
 
@@ -840,7 +908,7 @@ img {
   opacity: 0.6;
 }
 
-/* -- reusable inline aside (masumi caveats, method-specific step notes) ------*/
+/* -- reusable inline aside (step and settlement notes) ----------------------*/
 
 .step-note {
   margin-top: var(--space-3);
@@ -1556,6 +1624,18 @@ img {
 @media (max-width: 640px) {
   .stage {
     padding: var(--space-6) var(--space-4) var(--space-8);
+  }
+
+  .tab-nav {
+    margin: 0 0 var(--space-7);
+  }
+
+  .tab-nav__list {
+    gap: var(--space-5);
+  }
+
+  .tab-nav__label {
+    font-size: 1.0625rem;
   }
 
   .actor-legend {

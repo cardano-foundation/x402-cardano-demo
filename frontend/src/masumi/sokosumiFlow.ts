@@ -1,16 +1,16 @@
 /**
  * Hiring through Sokosumi, step by step. The UI only sees Sokosumi's job
- * status (through the operator's local proxy); the middle steps happen inside
+ * status (through the demo server's Sokosumi proxy); the middle steps happen inside
  * Sokosumi and are explained, not observed.
  */
-import { sokosumiStage } from "../sokosumi.js";
+import { sokosumiStage } from "../../../masumi/src/sokosumi.js";
 import type { Step } from "./steps.js";
 
 export type SokosumiStepId = "hire" | "startJob" | "pay" | "work" | "done" | "collect";
 interface ProxyJob { id?: string; status?: string; result?: string | null; name?: string | null; error?: string }
 
 export interface SokosumiDeps {
-  /** `fetch` against the local Sokosumi proxy (`/sokosumi/...`). */
+  /** `fetch` against the demo server's Sokosumi proxy (`/sokosumi/...` under `/masumi`). */
   api(path: string, init?: RequestInit): Promise<Response>;
   emit(id: SokosumiStepId, patch: Partial<Step>): void;
   sleep?(ms: number): Promise<void>;
@@ -20,7 +20,7 @@ const INSIDE = "Happens inside Sokosumi; this UI sees only the job status.";
 
 export const sokosumiSteps = (): Step[] => [
   { id: "hire", actor: "buyer", status: "pending", title: "Create a job on Sokosumi",
-    explain: "The UI asks the agent's local proxy, which calls Sokosumi's API (POST /v1/agents/{id}/jobs) with your API key. The key never reaches the browser.",
+    explain: "The page asks the demo server's Sokosumi proxy, which calls Sokosumi's API (POST /v1/agents/{id}/jobs) with your API key. The key never reaches the browser.",
     lookFor: "The inspector shows the proxy's reduced job (id, status, result, name), not Sokosumi's full response." },
   { id: "startJob", actor: "sokosumi", status: "pending", title: "Sokosumi calls the agent's start_job",
     explain: "Standard Masumi path (MIP-003): the agent returns seller-signed terms (blockchainIdentifier) that Sokosumi's payment node verifies. Run npm run check-purchase to see the same checks locally.",

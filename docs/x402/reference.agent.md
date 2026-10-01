@@ -76,7 +76,7 @@ The general `script` method binds `payTo` to the declared script but cannot vali
 | Scheme | `exact` |
 | Networks | `cardano:mainnet`, `cardano:preprod`, `cardano:preview`; demo uses preprod |
 | Assets | `lovelace` or `policyId.assetNameHex` |
-| Transfer methods | Specification: `default`, `masumi`, `script`; demo: `default`, `masumi` |
+| Transfer methods | Specification: `default`, `masumi`, `script`; demo: `default` (Transactions tab), `masumi` (Masumi agent tab, issued by the agent in `masumi/`) |
 | Fees | `areFeesSponsored: false`; payer funds fees and minimum output ADA |
 | Confirmation level `-1` | Facilitator's own broadcast acceptance; requires operator opt-in |
 | Confirmation level `0` | Canonical block inclusion |
@@ -97,8 +97,8 @@ Canonical network names use CAIP-2 syntax; `cardano` is not a CASA-registered na
 - A timeout, transport error, or generic `exact_cardano_settlement_failed` after submission does not establish non-payment. Only a matching definitive-rejection or explicitly expired receipt releases an uncertain payment. The bundled facilitator confirms any SDK expiry result with a successful fresh evidence lookup returning unknown; lookup errors or observed transactions remain pending. The extra lookup is capped at 15 seconds.
 - Application handlers may run on each paid retry. This demo caches the body and binds one transaction to one route and request ID. A successful verification is reused only for the identical payload, requirements and operation; the official settlement path still performs post-broadcast checks. Invalid verification results never reserve an operation. This lets previously submitted payments reach confirmation or explicit expiry instead of failing fresh TTL/unspent-input validation.
 - Masumi requires the originally issued quote; unknown or altered terms are rejected before settlement. A second transaction cannot claim the same terms.
-- Successful Masumi settlement means escrow lock, not seller payout. No release/refund/dispute workflow is implemented here; stock Masumi Payment Service lifecycle signatures are incompatible with x402 `termsDigest` authorization.
-- Browser retry state, application operation records, Masumi quote records and facilitator settlement records are process-local. No restart or distributed persistence guarantee is provided.
+- Successful Masumi settlement means escrow lock, not seller payout. The Masumi agent tab's agent (`masumi/`) submits the result and collects after `unlock_time`; refunds and disputes are not implemented.
+- Browser retry state, application operation records and facilitator settlement records are process-local. No restart or distributed persistence guarantee is provided.
 
 ## ERRORS
 
@@ -164,8 +164,6 @@ Complete `ERR_*` string inventory exported by the pinned `@x402/cardano` release
 |---|---|---|---|
 | `GET /api/message` | `2000000` | `lovelace` | `default` |
 | `GET /api/message-usdm` | `100000` | Native token | `default` |
-| `GET /api/message-masumi` | `5000000` | `lovelace` | `masumi` |
-| `GET /api/message-masumi-usdm` | `250000` | Native token | `masumi` |
 
 Default native asset, `USDM_PREPROD_ASSET`:
 `e675b46e4d2242c991a8932a99db3044e80515ae14b4c4ccf6b3f4c9.0014df10745553444d`.
@@ -173,7 +171,7 @@ Default native asset, `USDM_PREPROD_ASSET`:
 | Component | Port | Configuration |
 |---|---|---|
 | Frontend | 5173 | `VITE_BLOCKFROST_PROJECT_ID`, `VITE_SERVER_URL` |
-| Server | 4021 | `SERVER_CARDANO_ADDRESS`, `FACILITATOR_URL`, optional `MASUMI_SELLER_MNEMONIC`, `USDM_ASSET`, `L1_CONFIRMATIONS`, `FACILITATOR_TIMEOUT_MS` |
+| Server | 4021 | `SERVER_CARDANO_ADDRESS`, `FACILITATOR_URL`, optional `USDM_ASSET`, `L1_CONFIRMATIONS`, `FACILITATOR_TIMEOUT_MS`; Masumi tab: `MASUMI_AGENT_URL`, `FRONTEND_ORIGINS`, `SOKOSUMI_API_KEY`, `SOKOSUMI_AGENT_ID`, `SOKOSUMI_AGENT_NAME`, `SOKOSUMI_MAX_CREDITS`, `SOKOSUMI_ORGANIZATION_SLUG`, `SOKOSUMI_API_URL` |
 | Facilitator | 4022 | `BLOCKFROST_PROJECT_ID`, optional `BLOCKFROST_BASE_URL`, `ACCEPT_MEMPOOL`, `CONFIRMATION_TIMEOUT_MS` |
 
 - Node 22+; one root npm workspace and `package-lock.json`; `./setup.sh` runs `npm ci` and copies only missing `.env` files.
@@ -181,7 +179,7 @@ Default native asset, `USDM_PREPROD_ASSET`:
 - Browser key is public; use a dedicated preprod provider project. Replace the example receiving address.
 - Default facilitator wait: 75000ms per call. Provider signer uses `awaitConfirmation: false`.
 - Resource server default HTTP timeout: `max(120000, wait + 45000)`; fallback wait 75000ms. Override must leave at least 15000ms margin.
-- Blank optional seller mnemonic selects a public test phrase; it does not need funds to authorize quotes.
+- `/masumi/*` on the server: fixed-path forward to the Masumi agent; `/masumi/sokosumi/*` exists only with `SOKOSUMI_API_KEY` and answers only `FRONTEND_ORIGINS` from loopback, without forwarding headers. Never expose the server while the key is set.
 - Verification: `npm run typecheck`, `npm run build`, `npm test`, `npm run test:browser`, `npm run verify:docs`. Browser tests require Playwright Chromium; real preprod settlement needs separate manual verification.
 
 ## CITATIONS

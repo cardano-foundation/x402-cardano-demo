@@ -16,11 +16,6 @@ interface TimelineProps {
   payStartedAt: number | null;
 }
 
-/** For `masumi`, "confirmed" doesn't mean the same thing it does for
- * `default` — the resource server's own response body already says so (see
- * `/api/message-masumi`'s handler), but the settled step's static copy
- * (`STEP_COPY.settled`) doesn't know which route ran. This fills that one gap
- * without having to fork STEP_COPY per method. */
 export function Timeline({ steps, method, runState, errorStepId, errorMessage, payStartedAt }: TimelineProps) {
   const byId = new Map(steps.map((s) => [s.id, s]));
   const requiredStep = byId.get("required");
@@ -51,12 +46,7 @@ export function Timeline({ steps, method, runState, errorStepId, errorMessage, p
               showWait={id === "pay" && Boolean(step) && !byId.has("settled") && runState === "running"}
               payStartedAt={payStartedAt}
               displayPrice={method.price}
-              methodNote={
-                id === "settled" && (method.id === "masumi" || method.id === "masumi-usdm")
-                  ? `This payment uses Masumi escrow for ${method.price}; it does not pay the seller directly.`
-                  : undefined
-              }
-            />
+/>
           );
         })}
       </ol>
@@ -87,7 +77,6 @@ interface StepCardSlotProps {
   maxTimeoutSeconds?: number;
   showWait: boolean;
   payStartedAt: number | null;
-  methodNote?: string;
   displayPrice: string;
 }
 
@@ -102,7 +91,6 @@ function StepCardSlot({
   maxTimeoutSeconds,
   showWait,
   payStartedAt,
-  methodNote,
   displayPrice,
 }: StepCardSlotProps) {
   return (
@@ -115,7 +103,6 @@ function StepCardSlot({
         status={status}
         error={error}
         maxTimeoutSeconds={maxTimeoutSeconds}
-        methodNote={methodNote}
         displayPrice={displayPrice}
       />
       {showWait && payStartedAt !== null && (

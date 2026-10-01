@@ -4,7 +4,7 @@
  * `api` function and returns the original response.
  */
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader, decodePaymentSignatureHeader } from "@x402/core/http";
-import { sokosumiStage } from "../sokosumi.js";
+import { sokosumiStage } from "../../../masumi/src/sokosumi.js";
 
 export interface HttpExchange {
   /** Same id for the pending report and the final one of one request. */
@@ -14,7 +14,7 @@ export interface HttpExchange {
   method: string;
   /** The flow's path (used to place the exchange on a step). */
   path: string;
-  /** What the browser really requests (with the dev-server prefix). */
+  /** What the browser really requests (with the demo server's `/masumi` prefix). */
   url: string;
   requestHeaders: Record<string, string>;
   requestBody?: unknown;

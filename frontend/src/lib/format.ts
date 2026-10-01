@@ -61,8 +61,6 @@ const ERROR_EXPLANATIONS: Record<string, string> = {
   exact_cardano_settlement_definitively_rejected: "Cardano definitively rejected this transaction, so it is safe to start a new payment.",
   exact_cardano_facilitator_evidence_unavailable: "The facilitator could not determine the transaction's current on-chain status.",
   duplicate_settlement: "This exact nonce has already been settled once — replay protection is doing its job.",
-  masumi_terms_unknown: "The facilitator no longer has the issued Masumi terms for this payment.",
-  masumi_terms_mismatch: "The submitted Masumi payment does not match the terms issued for this request.",
 };
 
 export function explainErrorCode(code: string): string | undefined {

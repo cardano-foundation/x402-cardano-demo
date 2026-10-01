@@ -7,7 +7,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { buildMasumiLockDatum, parseMasumiLockDatum, type ClientCardanoSigner } from "@x402/cardano";
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from "@x402/core/http";
-import { ESCROW_ADDRESS, REGISTRY_POLICY_ID, TUSDM_UNIT, TUSDM_X402_ASSET } from "../constants.js";
+import { ESCROW_ADDRESS, REGISTRY_POLICY_ID, TUSDM_UNIT, TUSDM_X402_ASSET } from "../../../masumi/src/constants.js";
 import { displayable } from "./steps.js";
 import type { JobView, Offer, SignerContext, X402Deps } from "./x402Flow.js";
 

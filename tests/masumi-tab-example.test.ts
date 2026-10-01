@@ -1,9 +1,9 @@
 /** The replay is the real x402 flow module against a simulated agent and wallet, so its data cannot drift. */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { EXAMPLE_OFFER, exampleDeps } from "../src/ui/example.js";
-import { updateStep, type Step } from "../src/ui/steps.js";
-import { runX402, x402Steps } from "../src/ui/x402Flow.js";
+import { EXAMPLE_OFFER, exampleDeps } from "../frontend/src/masumi/example.ts";
+import { updateStep, type Step } from "../frontend/src/masumi/steps.ts";
+import { runX402, x402Steps } from "../frontend/src/masumi/x402Flow.ts";
 
 test("the example runs through the real runX402 to completion, with data on every step", async () => {
   let steps: Step[] = x402Steps(EXAMPLE_OFFER);

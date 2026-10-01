@@ -180,14 +180,6 @@ export function ControlPanel({
 
 function methodHint(method: DemoMethod): string {
   const token = method.asset.toLowerCase() !== "lovelace";
-  const masumi = method.id === "masumi" || method.id === "masumi-usdm";
-
-  if (masumi) {
-    const tokenFunding = token
-      ? " Your wallet also needs test ADA for the fee and the escrow output's minimum ADA."
-      : "";
-    return `${method.price} is locked in Masumi escrow, not delivered to the seller.${tokenFunding} This demo has no release or refund controls, and its x402 authorization is not compatible with the stock Masumi Payment Service.`;
-  }
   if (token) {
     return `${method.price} is paid as a Cardano native token. Your wallet also needs test ADA for the transaction fee and the token output's minimum ADA.`;
   }
@@ -195,7 +187,5 @@ function methodHint(method: DemoMethod): string {
 }
 
 function methodAction(method: DemoMethod): string {
-  return method.id === "masumi" || method.id === "masumi-usdm"
-    ? `Lock ${method.price} in escrow`
-    : `Pay ${method.price}`;
+  return `Pay ${method.price}`;
 }

@@ -26,7 +26,7 @@ The frontend key is visible in the browser. Use a project dedicated to this test
 npm run dev
 ```
 
-Open **http://localhost:5173**, select **preprod** in your wallet, connect it and request the message. The first payment costs **2 tADA plus the network fee**. Both preprod and preview wallets report CIP-30 network ID `0`; the demo also checks wallet inputs against live preprod UTxOs before signing.
+Open **http://localhost:5173**. The page has two tabs: **Transactions**, an ordinary x402 payment for one HTTP resource, and **Masumi agent**, an AI agent hired through Masumi's escrow ([below](#the-masumi-agent-tab)). On Transactions, select **preprod** in your wallet, connect it and request the message. The first payment costs **2 tADA plus the network fee**. Both preprod and preview wallets report CIP-30 network ID `0`; the demo also checks wallet inputs against live preprod UTxOs before signing.
 
 All services start together. The server briefly waits for the facilitator during startup.
 
@@ -48,22 +48,32 @@ If settlement is still pending, the official server library retries settlement o
 
 ## Explore the advanced options
 
-ADA is the starting point. Open **Advanced** for native tokens, escrow and confirmation depth. The method list and confirmation range come from the connected facilitator's capabilities.
+ADA is the starting point. Open **Advanced** for native tokens and confirmation depth. The method list and confirmation range come from the connected facilitator's capabilities.
 
 | Route | Price | What happens |
 |---|---|---|
 | `GET /api/message` | 2 tADA (`2000000` lovelace) | Pay the receiving address |
 | `GET /api/message-usdm` | 0.10 tUSDM (`100000` units) | Pay the receiving address in a native token |
-| `GET /api/message-masumi` | 5 tADA (`5000000` lovelace) | Lock ADA in Masumi escrow |
-| `GET /api/message-masumi-usdm` | 0.25 tUSDM (`250000` units) | Lock a native token in Masumi escrow |
 
 Token payments require that exact preprod token in your wallet, plus ADA for fees and minimum output value. `USDM_ASSET` can override the default token on the server.
 
-For Masumi, connect a buyer wallet separate from the seller configured by `MASUMI_SELLER_MNEMONIC`. Masumi rejects identical buyer and seller payout addresses. The demo explains this before requesting a wallet signature.
-
 The default confirmation level is `1`: inclusion plus one newer block. Level `0` accepts block inclusion. Level `-1` accepts the facilitator's own broadcast acceptance and is offered only with `ACCEPT_MEMPOOL=true`; a mempool transaction may never become canonical. Higher levels take longer. The default facilitator wait is 75 seconds per settlement call, so deeper settings can need another check.
 
-**Masumi locks real testnet funds in escrow.** This demo has no release, refund or dispute workflow. Its x402 seller authorization signs `termsDigest`, which is not compatible with the stock Masumi Payment Service lifecycle signature flow. Do not assume those APIs can recover these deposits. The default seller uses a public test phrase and needs no funds to sign offers. Use the ADA route first; see the [Masumi explanation](docs/x402/guide.md#masumi-is-an-escrow-lock) before trying escrow.
+## The Masumi agent tab
+
+The second tab hires a real, registered [Masumi](https://masumi.network) agent and follows the money: the price is locked in Masumi's escrow contract, the agent does the job and puts the result hash on chain, and the seller collects after the unlock time. Pay over x402 with your wallet (Masumi tUSDM or tADA), or hire through Sokosumi with credits. **Replay an example** runs the same flow code against a simulated agent and wallet, with no setup at all.
+
+The agent itself runs from [`masumi/`](masumi/README.md): its guide covers funding, the public URL, registration (`npm run register`), running (`npm run agent`) and collecting. While it runs, this demo's server reaches it at `MASUMI_AGENT_URL` (default `http://127.0.0.1:8787`) and forwards the tab's requests under `/masumi`. Every request and transaction is documented in [masumi/docs/FLOWS.md](masumi/docs/FLOWS.md).
+
+To hire through Sokosumi from the tab, set in `server/.env`:
+
+| Variable | Value |
+|---|---|
+| `SOKOSUMI_API_KEY` | Your Sokosumi user API key. It stays in the server and spends your credits |
+| `SOKOSUMI_AGENT_ID` or `SOKOSUMI_AGENT_NAME` | Your agent on Sokosumi (required with the key) |
+| `SOKOSUMI_MAX_CREDITS` | Optional cap per hire |
+
+The server's Sokosumi routes answer only the demo page (`FRONTEND_ORIGINS`, default `http://localhost:5173`) from this machine. **Never tunnel or expose the server while the key is set**; only the agent needs a public URL.
 
 ## Read or change the code
 
@@ -79,7 +89,7 @@ npm run test:browser
 npm run verify:docs
 ```
 
-The browser checks require Chromium installed for Playwright (`npx playwright install chromium`). Automated tests cover all four routes, automatic recovery, expiry, replay and provider failures. They include the production CIP-30 signer and HTTP Blockfrost adapter against a local provider fixture. A real wallet-to-preprod payment is a separate manual check.
+The browser checks require Chromium installed for Playwright (`npx playwright install chromium`). Automated tests cover both payment routes, the Masumi tab (its flows, the `/masumi` server routes and a browser run), automatic recovery, expiry, replay and provider failures. They include the production CIP-30 signer and HTTP Blockfrost adapter against a local provider fixture. A real wallet-to-preprod payment is a separate manual check.
 
 ## Troubleshooting
 
@@ -90,4 +100,4 @@ The browser checks require Chromium installed for Playwright (`npx playwright in
 - **Provider evaluation/submission failure:** the official adapter uses Blockfrost’s transaction evaluation endpoint even for ordinary payments. Check provider availability and the facilitator log. Some published adapter errors omit the underlying Blockfrost response body; an ambiguous submission failure must be checked until confirmation or explicit expiry.
 - **Rejected payment:** the UI reads the protocol error headers; the server logs verification and settlement reasons. Check those before changing the configuration.
 
-This is a local, single-process teaching demo. Payment-operation records, issued Masumi quotes and facilitator settlement records are process-local. Restarting services loses that state; production or multiple-instance deployments need durable, atomic storage and application-level idempotency.
+This is a local, single-process teaching demo. Payment-operation records and facilitator settlement records are process-local. Restarting services loses that state; production or multiple-instance deployments need durable, atomic storage and application-level idempotency.

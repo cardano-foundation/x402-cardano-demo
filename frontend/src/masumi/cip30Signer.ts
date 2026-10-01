@@ -4,8 +4,8 @@
  */
 import { Address, Assets, Client, Transaction, preprod, type UTxO } from "@evolution-sdk/evolution";
 import { buildMasumiLock, LOVELACE_ASSET, parseAssetUnit, parseMasumiLockDatum, validateMasumiExtra, verifyMasumiAuthorization, type CardanoExtraMasumi, type ClientCardanoSigner } from "@x402/cardano";
-import { formatTusdm, NETWORK, TUSDM_POLICY_ID } from "../constants.js";
-import { makeRegistryValidator, type Blockfrost } from "../registry.js";
+import { formatTusdm, NETWORK, TUSDM_POLICY_ID } from "../../../masumi/src/constants.js";
+import { makeRegistryValidator, type Blockfrost } from "../../../masumi/src/registry.js";
 import type { SignerContext } from "./x402Flow.js";
 
 interface Cip30Api { getNetworkId(): Promise<number> }

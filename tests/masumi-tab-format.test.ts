@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { TUSDM_UNIT, TUSDM_X402_ASSET } from "../src/constants.js";
-import { assetLabel, formatAmount, formatTime, kindOf, relative, shortMiddle } from "../src/ui/format.js";
+import { TUSDM_UNIT, TUSDM_X402_ASSET } from "../masumi/src/constants.ts";
+import { assetLabel, formatAmount, formatTime, kindOf, relative, shortMiddle } from "../frontend/src/masumi/format.ts";
 
 const at = Date.UTC(2026, 8, 30, 10, 32, 5); // 30 Sep 2026 10:32:05 UTC
 

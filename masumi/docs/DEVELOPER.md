@@ -18,7 +18,8 @@ Upstream sources are cited as `repo@commit path:lines`. The ports and tests were
 flowchart LR
   subgraph Buyers
     S[Sokosumi / Soko Bot<br/>+ its Masumi Payment Service]
-    U[x402 UI<br/>CIP-30 wallet]
+    U[Main demo, Masumi tab<br/>CIP-30 wallet]
+    D[Main demo server<br/>/masumi forward + Sokosumi proxy]
   end
   subgraph Agent["agent.ts (one Node process)"]
     M[MIP-003 routes<br/>POST /start_job]
@@ -30,7 +31,8 @@ flowchart LR
   R[(Registry V2 NFT)]
   S -- start_job --> M
   S -- lock tUSDM --> E
-  U -- 402 / paid retry --> X
+  U --> D -- 402 / paid retry --> X
+  D -- hire with API key --> S
   X --> F -- broadcast lock --> E
   W -- scan, SubmitResult --> E
   CLI[scripts: register / collect / deregister / check] --> R
@@ -48,15 +50,22 @@ flowchart LR
 | `src/config.ts` | `.env` parsing | Node |
 | `src/scripts/*` | CLIs | Node |
 | `src/jobView.ts` | The job record and its JSON view (lock snapshot, result hash, cooldown) | Node |
-| `src/sokosumi.ts` | Sokosumi API client and status mapping (used by the operator proxy) | Node and browser |
-| `src/ui/x402Flow.ts`, `src/ui/sokosumiFlow.ts` | The two purchase flows as step events, with injected HTTP, signer and clock (unit-tested without a browser) | Browser |
-| `src/ui/steps.ts`, `format.ts` | Step model, datum explanations, and pure formatting (times, amounts, asset names, value kinds) | Browser |
-| `src/ui/App.tsx`, `FlowDiagram.tsx`, `Inspector.tsx`, `Deadlines.tsx`, `JsonTree.tsx`, `Value.tsx` | The page: flow diagram with the money token, timeline, tabbed inspector (explain, datum with deadline axis, raw JSON tree), formatted values | Browser |
-| `src/ui/runs.ts`, `example.ts` | One run at a time (abortable, stale writes dropped); the replayed example = the real x402 flow against a simulated agent and wallet | Browser |
-| `src/ui/cip30Signer.ts` | CIP-30 signer; reports verification and the built lock to the flow | Browser |
+| `src/sokosumi.ts` | Sokosumi API client and status mapping. Not used by the agent: the main demo's server (proxy) and frontend (status mapping) import it | Node and browser |
 | `test/vendor/paymentServiceVerifier.ts` | Independent port of Sokosumi's and the Payment Service's purchase checks | Tests and `check-purchase` |
 
-**Dependency direction.** `constants`, `masumi`, `lockMatch` and `registry` have no IO except `fetch` in `registry`. `chain` and `agent` do the IO. The UI imports only browser-safe modules. Keep it that way, because it keeps the security-relevant logic unit-testable.
+**Dependency direction.** `constants`, `masumi`, `lockMatch` and `registry` have no IO except `fetch` in `registry`. `chain` and `agent` do the IO. Nothing here imports from the main demo; the main demo imports the browser-safe modules (`constants`, `registry`, `sokosumi`) from here. Keep it that way, because it keeps the security-relevant logic unit-testable and this folder standalone.
+
+**The UI lives in the main demo** (`../frontend`, `../server`), as its **Masumi agent** tab:
+
+| Main demo module | Role |
+|---|---|
+| `frontend/src/tabs/MasumiTab.tsx` | The tab: money rail, wallet and route choice, step timeline with the inspector |
+| `frontend/src/masumi/x402Flow.ts`, `sokosumiFlow.ts` | The two purchase flows as step events, with injected HTTP, signer and clock (unit-tested without a browser) |
+| `frontend/src/masumi/cip30Signer.ts` | CIP-30 escrow signer: verifies the offer, builds the lock, reports both to the flow |
+| `frontend/src/masumi/steps.ts`, `format.ts`, `http.ts` | Step model and datum explanations; pure formatting; the HTTP recorder behind the inspector's HTTP view |
+| `frontend/src/masumi/runs.ts`, `example.ts` | One run at a time (abortable, stale writes dropped); the replayed example = the real x402 flow against a simulated agent and wallet |
+| `frontend/src/masumi/MoneyRail.tsx`, `Inspector.tsx`, `HttpExchange.tsx`, `Deadlines.tsx`, `JsonTree.tsx`, `Value.tsx` | Where the money is, and the inspector (HTTP, explain, datum with deadline axis, raw JSON tree) |
+| `server/src/masumi.ts` | `/masumi/*`: fixed-path forward to this agent (`MASUMI_AGENT_URL`) and the guarded Sokosumi proxy |
 
 ## 2. Masumi concepts
 
@@ -242,9 +251,10 @@ It never calls `/availability`; the registry does.
 - Lovelace is not a default x402 asset: the client must allow it explicitly in `spendControls`, capped at the price, or it rejects the offer (or pays uncapped).
 - Sokosumi and the standard path are unaffected.
 
-**Hiring via Sokosumi from the UI** (`src/sokosumi.ts`, the proxy at the end of `agent.ts`). With `SOKOSUMI_API_KEY` set, the UI can create a Sokosumi job for the agent. The calls are `GET /v1/agents?kind=cardano` (paged by `meta.pagination.nextCursor`) or `SOKOSUMI_AGENT_ID`, then `GET /v1/agents/{id}/input-schema`, `POST /v1/agents/{id}/jobs` and `GET /v1/jobs/{id}`. All use the user API key as a Bearer token, and responses come wrapped as `{ data, meta }`.
-- **Where it runs.** The key is used only by a proxy bound to `127.0.0.1` on its own port. The tunnel forwards only the agent port.
-- **Browser defences.** The proxy checks `Origin` and requires JSON. For direct hits it also checks `Host`. For requests through Vite (`xfwd`) it checks `X-Forwarded-Host` (the UI's host) and `X-Forwarded-For` (loopback), with Vite's own host check in front. So pages open in the operator's browser can't spend credits through DNS rebinding or cross-site posts, and neither can LAN clients if Vite runs with `--host`.
+**Hiring via Sokosumi from the UI** (`src/sokosumi.ts`, used by the proxy in the main demo's `server/src/masumi.ts`). With `SOKOSUMI_API_KEY` set, the UI can create a Sokosumi job for the agent. The calls are `GET /v1/agents?kind=cardano` (paged by `meta.pagination.nextCursor`) or `SOKOSUMI_AGENT_ID`, then `GET /v1/agents/{id}/input-schema`, `POST /v1/agents/{id}/jobs` and `GET /v1/jobs/{id}`. All use the user API key as a Bearer token, and responses come wrapped as `{ data, meta }`.
+- **Where it runs.** The key lives only in the demo server, which listens on `127.0.0.1`. The tunnel forwards only the agent port; never expose the demo server.
+- **Which agent.** With the key set, the server requires `SOKOSUMI_AGENT_ID` or the exact `SOKOSUMI_AGENT_NAME` and refuses to start otherwise, so a catalog lookup by a default name cannot hire, and bill, someone else's agent.
+- **Browser defences.** The proxy is mounted before the server's open CORS. It requires a loopback `Host` and client, no forwarding headers, an exact `FRONTEND_ORIGINS` `Origin` (also on GETs), `Sec-Fetch-Mode: cors` when present, and a JSON body (which forces a preflight). So pages open in the operator's browser can't spend credits through DNS rebinding or cross-site posts. One hire runs at a time. `tests/masumi-tab-server.test.ts` covers each rule; [FLOWS.md §4.1](FLOWS.md#41-hire-masumi-tab--demo-server--sokosumi) lists them.
 - **No retries.** The create call is never retried, because a retry would be a second paid job.
 - **Status mapping.** Every Sokosumi job status maps to a UI stage (`sokosumiStage`), and anything unexpected ends polling.
 - **Visibility.** Sokosumi's hire path uses the same visibility filter as its catalog, so a hidden agent returns 404 here too.
@@ -282,8 +292,10 @@ It never calls `/availability`; the registry does.
 ## 7. Testing
 
 ```sh
-npm run typecheck && npm test && npm run build
+npm run typecheck && npm test
 ```
+
+The UI's tests (flows, formatting, example, runs, HTTP recorder, the `/masumi` server routes and a browser run of the tab) live in the main demo as `tests/masumi-tab-*`.
 
 | File | Guards |
 |---|---|
@@ -292,9 +304,8 @@ npm run typecheck && npm test && npm run build
 | `test/registry.test.ts` | The registry-claim validator: accept, and reject on wrong price, token, network, URL, holder, escrow or a Blockfrost failure |
 | `test/lockMatch.test.ts` | Lock matching: a genuine lock passes, every spoof fails, and tADA and tUSDM payments are not interchangeable |
 | `test/sokosumi.test.ts` | Sokosumi client: Bearer auth, envelope, cursor paging, unique name match, create body, the 404 hint, and the status-to-stage mapping for all 12 statuses |
-| `test/x402Flow.test.ts` | The UI's x402 flow with a fake agent and stub signer: offer filter, rejected payment, completed and failed jobs, the never-recorded timeout, the settle receipt |
-| `test/format.test.ts`, `test/example.test.ts`, `test/runs.test.ts` | Formatting on the real data shapes; the example completes through the real flow and stops when aborted; a replay can never write into a real run |
-| `test/jobView.test.ts`, `test/steps.test.ts` | The job view serialises (no bigints, no raw UTxO); the 19 datum rows and step helpers |
+| `test/jobView.test.ts` | The job view serialises (no bigints, no raw UTxO) |
+| `test/docs.test.ts` | FLOWS.md states the agent's exact routes, the redeemer indices, the deadlines and the x402 header names as the code defines them |
 | `test/chain.test.ts` | x402 lock lookup by transaction: only unspent, non-collateral escrow outputs; an unknown transaction yields nothing |
 
 `test/vendor/paymentServiceVerifier.ts` shares **no code** with `src/`. After Masumi or Sokosumi change their purchase flow, update the port from the cited files and rerun the tests. Against a running agent, `npm run check-quote` and `npm run check-purchase` run the same checks on live HTTP responses, and `npm run check-registry` validates the on-chain entry.

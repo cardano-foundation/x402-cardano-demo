@@ -23,7 +23,6 @@ const test = base.extend<{ backend: Backend }>({
         settle: (payload, requirements) => facilitator.settle(payload, requirements),
       },
       payTo: seller.sellerAddress,
-      masumiSeller: seller,
     });
     const listener = app.listen(44021, "127.0.0.1");
     await new Promise<void>((resolve, reject) => {
@@ -99,7 +98,7 @@ test("ADA is the default with Advanced collapsed on desktop and mobile", async (
   await openDemo(page, backend);
   await expect(page.getByRole("button", { name: "Pay 2 tADA" })).toBeDisabled();
   await expect(page.locator("details.advanced-options")).not.toHaveAttribute("open");
-  await expect(page.locator('input[type="radio"]')).toHaveCount(4);
+  await expect(page.locator('input[type="radio"]')).toHaveCount(2);
   await expect(page.locator('input[type="radio"]').first()).not.toBeVisible();
   await expect(page.getByText("Default", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -180,23 +179,6 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
-test("pending escrow does not claim that funds are already confirmed in the lock", async ({ page, backend }) => {
-  backend.state.confirmations = -1;
-  await openDemo(page, backend);
-  await connect(page);
-  await page.getByText("Advanced", { exact: true }).click();
-  await page.getByRole("radio", { name: "Masumi escrow 5 tADA" }).check();
-  await page.getByRole("button", { name: "Lock 5 tADA in escrow" }).click();
-  await expect(page.getByText("Settlement needs another check", { exact: true })).toBeVisible({ timeout: 25_000 });
-  await expect(page.getByText(/is confirmed in the Masumi escrow lock|This payment uses Masumi escrow/)).toHaveCount(0);
-  backend.state.confirmations = 1;
-  await page.getByRole("button", { name: "Check this payment again" }).click();
-  await expect(page.getByRole("button", { name: "Start a new payment" })).toBeVisible();
-  expect(backend.state.builds).toBe(1);
-  expect(backend.state.broadcasts).toBe(1);
-  await expect(page.getByText(/This payment uses Masumi escrow/)).toBeVisible();
-});
-
 test("mempool-only acceptance is visibly distinct from on-chain confirmation", async ({ page, backend }) => {
   backend.state.confirmations = -1;
   await openDemo(page, backend);
@@ -241,8 +223,6 @@ test("a rejected check explains the verification error and preserves recovery", 
 for (const method of [
   { radio: "ADA payment 2 tADA", button: "Pay 2 tADA" },
   { radio: "Native token 0.10 tUSDM", button: "Pay 0.10 tUSDM" },
-  { radio: "Masumi escrow 5 tADA", button: "Lock 5 tADA in escrow" },
-  { radio: "Masumi with token 0.25 tUSDM", button: "Lock 0.25 tUSDM in escrow" },
 ]) {
   test(`${method.radio} automatically reaches receipt and resource with one signature`, async ({ page, backend }) => {
     backend.state.confirmations = -1;

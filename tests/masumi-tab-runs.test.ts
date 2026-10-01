@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { EXAMPLE_OFFER, exampleDeps } from "../src/ui/example.js";
-import { createRuns } from "../src/ui/runs.js";
-import { runX402 } from "../src/ui/x402Flow.js";
+import { EXAMPLE_OFFER, exampleDeps } from "../frontend/src/masumi/example.ts";
+import { createRuns } from "../frontend/src/masumi/runs.ts";
+import { runX402 } from "../frontend/src/masumi/x402Flow.ts";
 
 test("starting a real run aborts the replay and drops every late write of it", async () => {
   const runs = createRuns();

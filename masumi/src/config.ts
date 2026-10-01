@@ -63,27 +63,3 @@ export const listing = (): AgentListing => ({
   image: optional("AGENT_IMAGE", "ipfs://QmXXW7tmBgpQpXoJMAMEXXFe9dyQcrLFKGuzxnHDnbKC7f"),
   priceUnits,
 });
-
-/**
- * Hiring through Sokosumi from the demo UI (optional). The key stays on this
- * machine: the agent calls Sokosumi through an operator-only proxy.
- */
-export const sokosumi = (() => {
-  const apiKey = process.env.SOKOSUMI_API_KEY?.trim();
-  if (!apiKey) return undefined;
-  const rawCap = process.env.SOKOSUMI_MAX_CREDITS?.trim();
-  const maxCredits = rawCap ? Number(rawCap) : undefined;
-  // The only spending guard: a typo must fail loudly, never silently drop the cap.
-  if (maxCredits !== undefined && !(Number.isFinite(maxCredits) && maxCredits > 0)) {
-    throw new Error("SOKOSUMI_MAX_CREDITS must be a positive number, or unset for no cap.");
-  }
-  return {
-    apiKey,
-    baseUrl: optional("SOKOSUMI_API_URL", "https://api.preprod.sokosumi.com/v1").replace(/\/+$/, ""),
-    agentId: process.env.SOKOSUMI_AGENT_ID?.trim() || undefined,
-    organizationSlug: process.env.SOKOSUMI_ORGANIZATION_SLUG?.trim() || undefined,
-    maxCredits,
-    proxyPort: Number(optional("SOKOSUMI_PROXY_PORT", "8788")),
-    agentName: agentName(),
-  };
-})();

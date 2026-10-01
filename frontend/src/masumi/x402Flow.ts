@@ -13,7 +13,7 @@ import { decodeCardanoTransaction, type ClientCardanoSigner, type MasumiDatumVie
 import { ExactCardanoScheme } from "@x402/cardano/exact/client";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import type { ResourceInfo } from "@x402/core/types";
-import { NETWORK, unitKey } from "../constants.js";
+import { NETWORK, unitKey } from "../../../masumi/src/constants.js";
 import type { Step } from "./steps.js";
 
 export interface Offer { path: string; amount: string; asset: string; resource: string; registered: boolean }
@@ -32,7 +32,7 @@ export interface SignerContext {
 }
 
 export interface X402Deps {
-  /** `fetch` against the agent (the UI prefixes `/api`). */
+  /** `fetch` against the agent (the tab sends it to `${VITE_SERVER_URL}/masumi`, which forwards). */
   api(path: string, init?: RequestInit): Promise<Response>;
   createSigner(context: SignerContext): Promise<ClientCardanoSigner>;
   emit(id: X402StepId, patch: Partial<Step>): void;

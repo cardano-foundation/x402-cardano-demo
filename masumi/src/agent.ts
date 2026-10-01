@@ -15,7 +15,9 @@
  *   2. the x402 side: in-process facilitator, one issuer + route per offer
  *   3. the watcher: lock matching, running the job, SubmitResult
  *   4. the HTTP routes (MIP-003 + x402 + demo extras)
- *   5. the operator-only Sokosumi proxy
+ *
+ * The agent is only the seller. The buyer side (the demo UI and the Sokosumi
+ * hire proxy) lives in the main demo: ../server and ../frontend, Masumi tab.
  *
  * HTTP surface (public port):
  *   GET  /availability          MIP-003 health; the registry calls it to mark the agent Online
@@ -23,7 +25,7 @@
  *   POST /start_job             MIP-003 purchase terms (standard path)
  *   POST /x402/start_job[/ada]  x402: 402 offer, then paid retry with PAYMENT-SIGNATURE
  *   GET  /status?job_id=        MIP-003 job status (Sokosumi polls this)
- *   GET  /jobs/:id, /jobs/by-tx/:hash, /demo/config   demo extras for the UI
+ *   GET  /jobs/:id, /jobs/by-tx/:hash, /demo/config   demo extras for the UI (via ../server)
  * See docs/FLOWS.md for every request and response in detail.
  */
 import express, { type NextFunction, type Request, type Response } from "express";
@@ -35,8 +37,7 @@ import { x402Facilitator } from "@x402/core/facilitator";
 import { decodePaymentSignatureHeader } from "@x402/core/http";
 import { x402HTTPResourceServer, x402ResourceServer, type FacilitatorClient, type HTTPTransportContext } from "@x402/core/server";
 import { paymentMiddlewareFromHTTPServer } from "@x402/express";
-import { adaPriceLovelace, agentIdentifier as configuredAgentIdentifier, blockfrost, port, priceUnits, publicUrl, sellerWallet, sokosumi } from "./config.js";
-import { createSokosumi } from "./sokosumi.js";
+import { adaPriceLovelace, agentIdentifier as configuredAgentIdentifier, blockfrost, port, priceUnits, publicUrl, sellerWallet } from "./config.js";
 import { createChain } from "./chain.js";
 import { ESCROW_ADDRESS, NETWORK, paymentKeyHash, TUSDM_UNIT, TUSDM_X402_ASSET } from "./constants.js";
 import { findLock, lockMismatch, type EscrowUtxo, type ExpectedLock } from "./lockMatch.js";
@@ -339,7 +340,6 @@ app.get("/demo/config", (_req, res) => {
   res.json({
     agentIdentifier, sellerAddress: seller.address, escrowAddress: ESCROW_ADDRESS,
     offers: offers.map(o => ({ path: o.path, amount: o.price.amount, asset: o.price.asset, resource: o.resource, registered: o.registered })),
-    sokosumi: { enabled: Boolean(sokosumi) },
   });
 });
 
@@ -352,58 +352,11 @@ for (const offer of offers) {
   await offer.server.initialize();
   await offer.http.initialize();
 }
-if (sokosumi) startSokosumiProxy(sokosumi);
 app.listen(port, () => {
   console.log(`Masumi agent on http://localhost:${port} (public: ${publicUrl()})`);
   console.log(`  agent ${agentIdentifier}\n  seller ${seller.address}`);
+  // Hiring through Sokosumi moved to the main demo's server, which holds the key now.
+  if (process.env.SOKOSUMI_API_KEY?.trim()) {
+    console.warn("  SOKOSUMI_API_KEY is set in masumi/.env but no longer used here: move the SOKOSUMI_* settings to server/.env (see masumi/README.md).");
+  }
 });
-
-// ---------------------------------------------------------------- Sokosumi (operator only)
-
-/**
- * Lets the demo UI hire this agent through Sokosumi with the operator's API
- * key. It listens on 127.0.0.1 on its own port, which the public tunnel does
- * not forward. Host and Origin checks stop web pages in the operator's browser
- * (DNS rebinding, cross-site posts) from spending credits or reading results.
- */
-function startSokosumiProxy(config: NonNullable<typeof sokosumi>) {
-  const client = createSokosumi(config);
-  const hosts = new Set([`127.0.0.1:${config.proxyPort}`, `localhost:${config.proxyPort}`]);
-  const origins = new Set(["http://localhost:5174", "http://127.0.0.1:5174"]);
-  const uiHosts = new Set(["localhost:5174", "127.0.0.1:5174"]);
-  const loopback = (ip: string) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip.trim());
-  const proxy = express();
-  proxy.disable("x-powered-by");
-  proxy.use((req, res, next) => {
-    const origin = req.get("Origin");
-    // Through Vite, also check who Vite was talking to (a LAN client if Vite runs with --host).
-    const forwardedHost = req.get("X-Forwarded-Host");
-    const forwardedFor = req.get("X-Forwarded-For");
-    if (!hosts.has(req.get("Host") ?? "") || (origin !== undefined && !origins.has(origin))
-      || (forwardedHost !== undefined && !uiHosts.has(forwardedHost))
-      || (forwardedFor !== undefined && !forwardedFor.split(",").every(loopback))) {
-      res.status(403).json({ error: "The Sokosumi proxy only serves the local demo UI." }); return;
-    }
-    if (req.method === "POST" && !req.is("application/json")) { res.status(415).json({ error: "Send application/json." }); return; }
-    next();
-  });
-  proxy.use(express.json({ limit: "4kb" }));
-  proxy.post("/sokosumi/hire", async (req, res) => {
-    const text = (req.body as { text?: unknown } | undefined)?.text;
-    if (typeof text !== "string" || !text.trim() || text.length > 500) { res.status(400).json({ error: "text must be 1-500 characters" }); return; }
-    // Never retried: a second call would be a second paid job.
-    try { res.status(201).json(await client.hire(text, config.maxCredits)); }
-    catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
-  });
-  proxy.get("/sokosumi/jobs/:id", async (req, res) => {
-    if (!/^[A-Za-z0-9_-]{1,100}$/.test(req.params.id)) { res.status(400).json({ error: "Invalid job id" }); return; }
-    try { res.json(await client.job(req.params.id)); }
-    catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
-  });
-  proxy.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(400).json({ error: error instanceof Error ? error.message : "Bad request" });
-  });
-  proxy.listen(config.proxyPort, "127.0.0.1", () => {
-    console.log(`  Sokosumi proxy on http://127.0.0.1:${config.proxyPort} (local only)`);
-  });
-}

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from "@x402/core/http";
-import { decodeX402Headers, logExchange, recordingApi, stepOf, type HttpExchange } from "../src/ui/http.js";
+import { decodeX402Headers, logExchange, recordingApi, stepOf, type HttpExchange } from "../frontend/src/masumi/http.ts";
 
 test("the recorder captures the exchange and hands the flow an untouched response", async () => {
   const exchanges: HttpExchange[] = [];

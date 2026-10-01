@@ -1,14 +1,14 @@
 /** Build in the browser and sign with CIP-30. Only the facilitator broadcasts. */
 import { Address, Assets, Client, Transaction, preprod, type UTxO } from "@evolution-sdk/evolution";
-import { buildMasumiLock, LOVELACE_ASSET, parseAssetUnit, validateMasumiExtra, verifyMasumiAuthorization, type CardanoExtraMasumi, type ClientCardanoSigner } from "@x402/cardano";
+import { LOVELACE_ASSET, parseAssetUnit, type ClientCardanoSigner } from "@x402/cardano";
 
 type Blockfrost = { baseUrl: string; projectId: string };
 export interface Cip30WalletApi { getNetworkId(): Promise<number> }
 const ref = (u: UTxO.UTxO) => `${Buffer.from(u.transactionId.hash).toString("hex")}#${u.index}`;
-function assets(asset: string, amount: bigint, coin = 0n) {
+function assets(asset: string, amount: bigint) {
   if (asset === LOVELACE_ASSET) return Assets.fromLovelace(amount);
   const { policyId, assetNameHex } = parseAssetUnit(asset);
-  return Assets.addByHex(Assets.fromLovelace(coin), policyId, assetNameHex, amount);
+  return Assets.addByHex(Assets.fromLovelace(0n), policyId, assetNameHex, amount);
 }
 async function query(provider: Blockfrost, path: string) {
   return fetch(`${provider.baseUrl}${path}`, {
@@ -51,45 +51,17 @@ export async function createCip30Signer(walletApi: unknown, provider: Blockfrost
       if (input.network !== "cardano:preprod") throw new Error("This demo supports Cardano preprod only.");
       await checkNetwork();
       const method = input.extra?.assetTransferMethod ?? "default";
-      if (method !== "default" && method !== "masumi") throw new Error("Unsupported payment method.");
-      let masumi: CardanoExtraMasumi | undefined;
-      if (method === "masumi") {
-        const schema = validateMasumiExtra(input.extra, input.network);
-        if (!schema.ok) throw new Error(`Invalid escrow terms: ${schema.detail}`);
-        masumi = schema.extra;
-        const authorization = await verifyMasumiAuthorization(masumi, {
-          scheme: "exact", network: "cardano:preprod", asset: input.asset, amount: input.amount,
-          payTo: input.payTo, maxTimeoutSeconds: input.maxTimeoutSeconds, extra: input.extra ?? {},
-        }, { requireAllPartContent: true });
-        if (!authorization.ok) throw new Error(`Invalid escrow authorization: ${authorization.reason}`);
-      }
+      if (method !== "default") throw new Error("Unsupported payment method.");
       const utxos = await client.getWalletUtxos();
       if (!utxos.length) throw new Error("Your wallet has no inputs. Fund it from the preprod faucet.");
       const usable = await liveUtxos(utxos, provider);
       const nonceInput = usable[0];
-      // Masumi forbids equal payout addresses. Check the actual input owner,
-      // which can differ from the wallet's displayed or change address.
-      if (masumi && Address.toHex(nonceInput.address) === Address.toHex(Address.fromBech32(
-        masumi.terms.sellerReturnAddress ?? masumi.terms.sellerAddress,
-      ))) {
-        throw new Error("Masumi escrow requires different buyer and seller payout addresses. Connect a different buyer wallet.");
-      }
-      let output = assets(input.asset, BigInt(input.amount));
-      let datum: ReturnType<typeof buildMasumiLock>["datum"] | undefined;
-      if (masumi) {
-        const response = await query(provider, "/epochs/latest/parameters");
-        if (!response.ok) throw new Error(`Blockfrost returned ${response.status} reading protocol parameters.`);
-        const parameters = await response.json() as { coins_per_utxo_size?: string };
-        if (!parameters.coins_per_utxo_size) throw new Error("Missing coins_per_utxo_size protocol parameter.");
-        const lock = buildMasumiLock(masumi, Address.toBech32(nonceInput.address), input.asset, BigInt(input.amount), BigInt(parameters.coins_per_utxo_size));
-        datum = lock.datum;
-        output = input.asset === LOVELACE_ASSET ? Assets.fromLovelace(lock.lockedLovelace) : assets(input.asset, BigInt(input.amount), lock.lockedLovelace);
-      }
-      const ttl = masumi ? BigInt(masumi.terms.payByTime) : BigInt(Date.now() + input.maxTimeoutSeconds * 1000);
+      const output = assets(input.asset, BigInt(input.amount));
+      const ttl = BigInt(Date.now() + input.maxTimeoutSeconds * 1000);
       const built = await client.newTx().collectFrom({ inputs: [nonceInput] })
-        .payToAddress({ address: Address.fromBech32(input.payTo), assets: output, ...(datum ? { datum } : {}) })
+        .payToAddress({ address: Address.fromBech32(input.payTo), assets: output })
         .setValidity({ to: ttl })
-        .build({ changeAddress: await client.address(), availableUtxos: usable, autoMinUtxo: !masumi && input.asset !== LOVELACE_ASSET });
+        .build({ changeAddress: await client.address(), availableUtxos: usable, autoMinUtxo: input.asset !== LOVELACE_ASSET });
       await checkNetwork();
       const unsigned = await built.toTransaction();
       const signed = await built.sign();

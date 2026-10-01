@@ -1,0 +1,950 @@
+/* ==========================================================================
+   Masumi tab
+   ==========================================================================
+   Built on the page's tokens and components (hero, rail, control panel,
+   step cards, status pills). Only what the Masumi flow adds is styled here:
+   the money on the rail, the route picker, the step inspector and the data
+   views inside it. Everything is scoped to .masumi-tab and uses :root tokens.
+   ========================================================================== */
+
+/* -- money on the rail ------------------------------------------------------*/
+
+.masumi-tab .money-rail .rail__node {
+  position: relative;
+}
+
+.masumi-tab .money-rail__amount {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--space-2));
+  transform: translateX(-50%);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--signal-line);
+  border-radius: var(--radius-sm);
+  background: var(--signal-soft);
+  color: var(--signal);
+  white-space: nowrap;
+  animation: step-in 0.4s ease both;
+}
+
+.masumi-tab .rail__node[data-state="success"] .money-rail__amount {
+  border-color: var(--confirmed);
+  background: var(--confirmed-soft);
+  color: var(--confirmed);
+}
+
+.masumi-tab .rail__node[data-state="error"] .money-rail__amount {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.masumi-tab .money-rail .rail__track {
+  padding-top: var(--space-6);
+}
+
+.masumi-tab .money-rail .rail__node[data-acting="true"][data-state="idle"] {
+  border-style: dashed;
+  border-color: var(--signal-line);
+}
+
+.masumi-tab .money-rail__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  max-width: var(--measure);
+  margin-top: var(--space-5);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--signal-line);
+}
+
+.masumi-tab .money-rail[data-money="collectable"] .money-rail__state {
+  border-left-color: var(--confirmed);
+}
+
+.masumi-tab .money-rail[data-money="unknown"] .money-rail__state {
+  border-left-color: var(--danger);
+}
+
+.masumi-tab .money-rail__state strong {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.masumi-tab .money-rail__source {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.masumi-tab .money-rail__detail {
+  flex-basis: 100%;
+  color: var(--mist);
+  font-size: 0.9375rem;
+}
+
+/* -- step B: agent status, route picker, job input --------------------------*/
+
+.masumi-tab .agent-down {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-sm);
+  color: var(--mist);
+  font-size: 0.9375rem;
+}
+
+.masumi-tab .agent-down strong {
+  color: var(--paper);
+}
+
+.masumi-tab .route-picker {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.masumi-tab .route-picker legend {
+  margin-bottom: var(--space-2);
+  color: var(--paper);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.masumi-tab .route-picker__option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.masumi-tab .route-picker__option + .route-picker__option {
+  border-top: 0;
+}
+
+.masumi-tab .route-picker__option:first-of-type {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.masumi-tab .route-picker__option:last-of-type {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.masumi-tab .route-picker__option input {
+  flex: none;
+  margin: 0.3rem 0 0;
+  accent-color: var(--signal);
+}
+
+.masumi-tab .route-picker__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.masumi-tab .route-picker__label {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.masumi-tab .route-picker__price {
+  color: var(--mist);
+}
+
+.masumi-tab .route-picker__note {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--mist);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.masumi-tab .route-picker__option[data-selected="true"] {
+  background: var(--signal-soft);
+}
+
+.masumi-tab .route-picker__option[data-selected="true"] .route-picker__label,
+.masumi-tab .route-picker__option[data-selected="true"] .route-picker__price {
+  color: var(--signal);
+}
+
+.masumi-tab .route-picker:not(:disabled) .route-picker__option:hover:not([data-selected="true"]) {
+  background: var(--panel-raised);
+}
+
+.masumi-tab .route-picker:disabled .route-picker__option {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.masumi-tab .job-input {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.masumi-tab .job-input__label {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.masumi-tab .job-input textarea {
+  width: 100%;
+  min-height: 3.5rem;
+  padding: var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--ink-raised);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+.masumi-tab .job-input textarea:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+.masumi-tab .job-input__hint {
+  color: var(--mist-dim);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .masumi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.masumi-tab .masumi-actions .btn {
+  margin: 0;
+}
+
+/* -- the run: timeline + inspector ------------------------------------------*/
+
+.masumi-tab .masumi-run__intro {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.masumi-tab .masumi-run__intro h2 {
+  font-size: clamp(1.5rem, 1vw + 1.2rem, 2rem);
+}
+
+.masumi-tab .masumi-run__intro p {
+  max-width: var(--measure);
+  color: var(--mist);
+}
+
+.masumi-tab .masumi-run__example {
+  color: var(--signal);
+}
+
+.masumi-tab .masumi-run__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 30rem);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.masumi-tab .masumi-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.masumi-tab .masumi-steps .step-card {
+  padding-bottom: var(--space-3);
+}
+
+.masumi-tab .masumi-steps .step-card[data-status="pending"][data-selected="true"] .step-card__body {
+  opacity: 1;
+}
+
+.masumi-tab .masumi-step {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  margin-top: calc(-1 * var(--space-2));
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.masumi-tab .masumi-step:hover {
+  background: var(--panel);
+}
+
+.masumi-tab .masumi-step:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.masumi-tab .step-card[data-selected="true"] .masumi-step {
+  background: var(--panel);
+  border-color: var(--rule);
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.masumi-tab .masumi-step .step-card__header {
+  margin: 0;
+}
+
+.masumi-tab .masumi-step .step-card__label {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.masumi-tab .masumi-step .step-card__wire {
+  margin: 0;
+}
+
+.masumi-tab .masumi-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin-top: var(--space-7);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule-soft);
+  color: var(--mist);
+  font-size: 0.875rem;
+}
+
+.masumi-tab .masumi-facts .mono-tag {
+  color: var(--paper);
+}
+
+.masumi-tab .masumi-facts a.mono-tag {
+  color: var(--signal);
+}
+
+/* -- inspector --------------------------------------------------------------*/
+
+.masumi-tab .inspector {
+  position: sticky;
+  top: var(--space-5);
+  max-height: calc(100vh - 2 * var(--space-5));
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--ink-raised);
+  font-size: 0.875rem;
+}
+
+.masumi-tab .inspector:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.masumi-tab .inspector h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.masumi-tab .inspector.empty {
+  display: grid;
+  gap: var(--space-3);
+  color: var(--mist);
+}
+
+.masumi-tab .inspector.empty strong {
+  color: var(--paper);
+}
+
+.masumi-tab .inspector-head {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.masumi-tab .chip {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.masumi-tab .example-flag {
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--signal-line);
+  border-radius: var(--radius-sm);
+  color: var(--signal);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+
+.masumi-tab .tabs button {
+  padding: var(--space-2) 0;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--mist);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.masumi-tab .tabs button:hover {
+  color: var(--paper);
+}
+
+.masumi-tab .tabs button.on {
+  color: var(--signal);
+  border-bottom-color: var(--signal);
+}
+
+.masumi-tab .tab-body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.masumi-tab .lede {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--paper);
+}
+
+.masumi-tab .look-for {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-left: 2px solid var(--signal-line);
+  background: var(--signal-soft);
+  color: var(--paper);
+}
+
+.masumi-tab .look-for strong {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.masumi-tab .muted {
+  color: var(--mist);
+}
+
+.masumi-tab .small {
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .ext::after {
+  content: " ↗";
+}
+
+/* values: formatted, copyable */
+
+.masumi-tab .v {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .v-str,
+.masumi-tab .v-time,
+.masumi-tab .v-amount {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+}
+
+.masumi-tab .v-amount {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+.masumi-tab .v-num,
+.masumi-tab .v-bool {
+  color: var(--confirmed);
+}
+
+.masumi-tab .v-null {
+  color: var(--mist-dim);
+}
+
+.masumi-tab .v-hash {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.masumi-tab .fake {
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  color: var(--signal);
+}
+
+.masumi-tab .copy {
+  padding: 0 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mist);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.masumi-tab .copy:hover {
+  color: var(--paper);
+  border-color: var(--mist-dim);
+}
+
+/* JSON tree */
+
+.masumi-tab .jt-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .jt ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  border-left: 1px solid var(--rule-soft);
+}
+
+.masumi-tab .jt .jt-root {
+  padding: 0;
+  border: 0;
+}
+
+.masumi-tab .jt-leaf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem var(--space-3);
+  padding: 0.15rem var(--space-1);
+}
+
+.masumi-tab .jt-leaf:hover {
+  background: var(--panel);
+}
+
+.masumi-tab .jt-key {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--mist);
+}
+
+.masumi-tab .jt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.15rem var(--space-1);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.masumi-tab .jt-toggle:hover {
+  background: var(--panel);
+}
+
+.masumi-tab .jt-caret {
+  width: 0.8rem;
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .jt-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--mist-dim);
+}
+
+/* escrow datum */
+
+.masumi-tab .dgroup h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.masumi-tab .dgroup dl {
+  margin: 0;
+}
+
+.masumi-tab .drow {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 1.4fr);
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.masumi-tab .drow dt {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+}
+
+.masumi-tab .drow dt code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--paper);
+}
+
+.masumi-tab .drow dd {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+}
+
+.masumi-tab .drow small {
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.masumi-tab .by {
+  justify-self: start;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--mist);
+}
+
+.masumi-tab .by-buyer {
+  color: var(--signal);
+}
+
+.masumi-tab .by-seller {
+  color: var(--confirmed);
+}
+
+.masumi-tab .creds {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.masumi-tab .cred {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem var(--space-2);
+}
+
+.masumi-tab .cred-label {
+  min-width: 5.5rem;
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+}
+
+/* deadlines axis */
+
+.masumi-tab .deadlines {
+  margin: 0 0 var(--space-2);
+}
+
+.masumi-tab .axis {
+  position: relative;
+  height: 2.4rem;
+  margin: var(--space-2) var(--space-2) var(--space-3);
+}
+
+.masumi-tab .axis::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1.2rem;
+  height: 1px;
+  background: var(--signal-line);
+}
+
+.masumi-tab .mark {
+  position: absolute;
+  top: 0.9rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-left: -0.325rem;
+  border-radius: 50%;
+  border: 1px solid var(--signal);
+  background: var(--ink-raised);
+}
+
+.masumi-tab .mark.passed {
+  border-color: var(--confirmed);
+  background: var(--confirmed);
+}
+
+.masumi-tab .now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--paper);
+}
+
+.masumi-tab .now span {
+  position: absolute;
+  top: -0.25rem;
+  left: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--paper);
+}
+
+.masumi-tab .axis-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.masumi-tab .axis-legend li {
+  display: grid;
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .axis-legend small {
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .axis-legend li.passed {
+  opacity: 0.55;
+}
+
+/* HTTP exchange */
+
+.masumi-tab .http {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.masumi-tab .http-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .method {
+  font-weight: 700;
+  color: var(--signal);
+}
+
+.masumi-tab .method.m-get {
+  color: var(--confirmed);
+}
+
+.masumi-tab .http-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--paper);
+}
+
+.masumi-tab .status {
+  padding: 0.05rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+}
+
+.masumi-tab .s-ok {
+  color: var(--confirmed);
+}
+
+.masumi-tab .s-pay {
+  color: var(--signal);
+}
+
+.masumi-tab .s-warn,
+.masumi-tab .s-wait {
+  color: var(--mist);
+}
+
+.masumi-tab .s-err {
+  color: var(--danger);
+}
+
+.masumi-tab .http-ms {
+  color: var(--mist-dim);
+  font-size: 0.75rem;
+}
+
+.masumi-tab .http-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.masumi-tab .http-parts.response-first {
+  flex-direction: column-reverse;
+}
+
+.masumi-tab .http-part h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.masumi-tab .http-part h4 {
+  margin: var(--space-3) 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--mist-dim);
+}
+
+.masumi-tab .http-headers {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.masumi-tab .http-headers > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.masumi-tab .http-headers dt {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--mist);
+}
+
+.masumi-tab .http-headers dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.masumi-tab .http-headers .mono {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.masumi-tab .x402-header {
+  border: 1px solid var(--signal-line);
+  background: var(--signal-soft);
+}
+
+.masumi-tab .x402-header dt {
+  color: var(--signal);
+}
+
+.masumi-tab .decoded {
+  margin-top: var(--space-2);
+}
+
+.masumi-tab .decoded summary {
+  margin-bottom: var(--space-2);
+  color: var(--mist);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.masumi-tab .code {
+  margin: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  background: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+}
+
+/* -- responsive --------------------------------------------------------------*/
+
+@media (max-width: 1100px) {
+  .masumi-tab .masumi-run__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .masumi-tab .inspector {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Every party stays visible: the rail wraps into a grid instead of scrolling. */
+  .masumi-tab .money-rail .rail__track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-7) var(--space-3);
+    overflow: visible;
+  }
+
+  .masumi-tab .money-rail .rail__connector {
+    display: none;
+  }
+
+  .masumi-tab .money-rail .rail__node {
+    width: 100%;
+  }
+
+  .masumi-tab .drow,
+  .masumi-tab .http-headers > div,
+  .masumi-tab .axis-legend {
+    grid-template-columns: 1fr;
+  }
+
+  .masumi-tab .masumi-actions .btn {
+    flex: 1 1 100%;
+  }
+}

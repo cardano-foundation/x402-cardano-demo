@@ -11,17 +11,15 @@ export type FlowStep =
   | { id: "build"; title: string; detail: { nonce: string; transactionBase64: string } }
   | { id: "pay"; title: string; detail: unknown }
   | { id: "settled"; title: string; detail: unknown };
-export type PaymentMethod = "default" | "masumi" | "usdm" | "masumi-usdm";
+export type PaymentMethod = "default" | "usdm";
 export interface PreparedPayment { url: string; headers: Record<string, string>; payload: PaymentPayload }
 export type FlowOutcome = { status: "settled" } | { status: "failed"; message: string } | {
   status: "pending" | "unknown"; payment: PreparedPayment; message: string; transaction?: string; retryable?: boolean;
 };
 export interface RecoveryOptions { automaticChecks?: number; retryDelayMs?: number }
 export interface FlowOptions extends RecoveryOptions { l1Confirmations?: number; asset?: string; amount?: string }
-const paths: Record<PaymentMethod, string> = {
-  default: "/api/message", usdm: "/api/message-usdm", masumi: "/api/message-masumi", "masumi-usdm": "/api/message-masumi-usdm",
-};
-const amounts: Record<PaymentMethod, string> = { default: "2000000", usdm: "100000", masumi: "5000000", "masumi-usdm": "250000" };
+const paths: Record<PaymentMethod, string> = { default: "/api/message", usdm: "/api/message-usdm" };
+const amounts: Record<PaymentMethod, string> = { default: "2000000", usdm: "100000" };
 
 export async function runPaymentFlow(
   serverUrl: string, signer: ClientCardanoSigner, onStep: (step: FlowStep) => void,
@@ -36,25 +34,16 @@ export async function runPaymentFlow(
   if (first.status !== 402) throw new Error(`Expected a payment offer, received HTTP ${first.status}.`);
   const http = new x402HTTPClient(x402Client.fromConfig({
     schemes: [{ network: "cardano:preprod", client: new ExactCardanoScheme(signer) }],
-    spendControls: { allowedAssets: [{ network: "cardano:preprod", asset: options.asset ?? (method.includes("usdm") ? USDM_PREPROD_ASSET : "lovelace"), maxAmountPerPayment: options.amount ?? amounts[method] }] },
+    spendControls: { allowedAssets: [{ network: "cardano:preprod", asset: options.asset ?? (method === "usdm" ? USDM_PREPROD_ASSET : "lovelace"), maxAmountPerPayment: options.amount ?? amounts[method] }] },
     policies: [(_version, offers) => offers.filter(offer =>
-      offer.asset === (options.asset ?? (method.includes("usdm") ? USDM_PREPROD_ASSET : "lovelace")) &&
+      offer.asset === (options.asset ?? (method === "usdm" ? USDM_PREPROD_ASSET : "lovelace")) &&
       offer.amount === (options.amount ?? amounts[method]) &&
-      (offer.extra?.assetTransferMethod ?? "default") === (method.startsWith("masumi") ? "masumi" : "default") &&
+      (offer.extra?.assetTransferMethod ?? "default") === "default" &&
       ((offer.extra?.confirmationPolicy as { l1Confirmations?: number } | undefined)?.l1Confirmations ?? 1) === (options.l1Confirmations ?? 1)
     )],
   }));
   const required = http.getPaymentRequiredResponse(name => first.headers.get(name));
   onStep({ id: "required", title: "Read the payment offer", detail: required });
-  if (method.startsWith("masumi")) {
-    // This demo buys only this GET URL. Refuse a seller commitment to other work.
-    for (const offer of required.accepts) {
-      const parts = (offer.extra?.inputCommitment as { parts?: Array<{ name: string; canonicalization: string; content?: unknown }> } | undefined)?.parts;
-      if (!parts || parts.length !== 1 || parts[0].name !== "resource" || parts[0].canonicalization !== "jcs" || JSON.stringify(parts[0].content) !== JSON.stringify({ url: url.href })) {
-        throw new Error("The escrow offer does not describe the request you made.");
-      }
-    }
-  }
   const payload = await http.createPaymentPayload(required);
   onStep({ id: "build", title: "Wallet signed the transaction", detail: {
     nonce: String(payload.payload.nonce), transactionBase64: String(payload.payload.transaction),

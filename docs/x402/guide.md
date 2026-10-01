@@ -126,17 +126,11 @@ The resource server sizes each facilitator HTTP timeout above the facilitator's 
 
 ## Masumi is an escrow lock
 
-Masumi requires distinct buyer and seller payout addresses. Use a separate buyer wallet from `MASUMI_SELLER_MNEMONIC`; ordinary ADA self-payment working does not make the same setup valid for escrow. The browser checks the selected nonce input's owning address against the seller's payout address before asking for a signature. Other verification failures retain the SDK's detailed explanation in the server log.
-
 An ordinary payment transfers value to the receiving address. Masumi places value in the deployed V2 `vested_pay` escrow with its required inline datum. A successful x402 receipt means the **lock settled**, not that the seller received spendable funds.
 
-The official resource-server scheme issues fresh requirements for each new unpaid request. It builds a request commitment, chooses a fresh seller nonce and deadlines, and obtains a seller COSE authorization over `termsDigest`. The complete issued requirements are stored and reused on the paid retry. The browser verifies that the quote commits to the GET URL it requested. Both the browser and facilitator validate the signed authorization and derived deployment address.
+The official resource-server scheme issues fresh requirements for each new unpaid request. It builds a request commitment, chooses a fresh seller nonce and deadlines, and obtains a seller COSE authorization over `termsDigest`. The complete issued requirements are stored and reused on the paid retry. Both the buyer and the facilitator validate the signed authorization and the derived deployment address. Masumi requires distinct buyer and seller payout addresses.
 
-The demo's seller defaults to a public test phrase, which needs no funds to authorize offers. Set `MASUMI_SELLER_MNEMONIC` only if you need a different test seller. It is a separate identity from `SERVER_CARDANO_ADDRESS`, which receives ordinary transfers. An omitted agent identifier makes no registry identity claim.
-
-The buyer uses the official helper to build the datum and collateral. For a token lock, structural ADA must cover the post-result minimum output value as well as the collateral rules. The seller does not supply a trusted collateral amount for the browser to copy.
-
-There is no release, refund, result submission or dispute implementation here. The stock Masumi Payment Service lifecycle signature flow does not accept this x402 `termsDigest` authorization as a drop-in replacement. Deposits remain governed by the contract, and the demo provides no recovery path. Use small testnet amounts and start with ordinary ADA payments.
+The **Masumi agent** tab shows this end to end with a registered agent that runs in `masumi/`. The agent issues the escrow offers, does the job, submits the result hash on chain and later collects; the tab follows the money through each step. See `masumi/README.md` to run and register the agent, and `masumi/docs/FLOWS.md` for every request and transaction. The **Transactions** tab offers only ordinary payments.
 
 ## Run and inspect the demo
 
@@ -150,14 +144,12 @@ npm run dev
 
 Set `BLOCKFROST_PROJECT_ID` in the facilitator, your own `SERVER_CARDANO_ADDRESS` in the server, and `VITE_BLOCKFROST_PROJECT_ID` in the frontend. Both provider IDs must select preprod. The Vite value is public to the browser; use a dedicated demo project. Setup preserves existing `.env` files. All dependencies install from the root lockfile using `npm ci`.
 
-The UI loads `GET /demo/config` before enabling payment. That response contains the supported methods, confirmation range and default. `POST /demo/config` changes only `l1Confirmations`. The default route is `GET /api/message`; Advanced expose the token and escrow routes when supported.
+The UI loads `GET /demo/config` before enabling payment. That response contains the supported methods, confirmation range and default. `POST /demo/config` changes only `l1Confirmations`. The default route is `GET /api/message`; Advanced exposes the token route.
 
 | Route | Atomic amount | Method |
 |---|---|---|
 | `GET /api/message` | `2000000` lovelace | `default` |
 | `GET /api/message-usdm` | `100000` token units | `default` |
-| `GET /api/message-masumi` | `5000000` lovelace | `masumi` |
-| `GET /api/message-masumi-usdm` | `250000` token units | `masumi` |
 
 Start reading the implementation at `server/src/app.ts`, then `frontend/src/x402/flow.ts`. `frontend/src/x402/cip30Signer.ts` contains the browser wallet adapter; `facilitator/src/facilitator.ts` exposes the official scheme over HTTP.
 

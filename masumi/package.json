@@ -3,12 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A Masumi agent on Cardano preprod, hireable via Sokosumi (standard Masumi flow) and via x402.",
+  "description": "A Masumi agent on Cardano preprod, hireable via Sokosumi (standard Masumi flow) and via x402. Its demo UI is the main demo's Masumi tab.",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev": "concurrently --kill-others --names agent,ui \"npm run agent\" \"vite\"",
     "agent": "tsx watch src/agent.ts",
     "register": "tsx src/scripts/register.ts",
     "deregister": "tsx src/scripts/deregister.ts",
@@ -17,8 +16,7 @@
     "check-purchase": "tsx src/scripts/check.ts purchase",
     "check-registry": "tsx src/scripts/check.ts registry",
     "test": "node --import tsx --test test/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json",
-    "build": "vite build"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@evolution-sdk/evolution": "0.5.13",
@@ -29,22 +27,14 @@
     "canonical-json": "0.2.0",
     "dotenv": "16.6.1",
     "express": "4.22.3",
-    "lz-string": "1.5.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "lz-string": "1.5.0"
   },
   "devDependencies": {
     "@meshsdk/core-cst": "1.9.0-beta.90",
     "@types/express": "4.17.25",
     "@types/node": "22.20.4",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "4.7.0",
-    "concurrently": "10.0.5",
     "tsx": "4.23.1",
     "typescript": "5.9.3",
-    "vite": "6.4.3",
-    "vite-plugin-node-polyfills": "0.23.0",
     "zod": "3.25.76"
   }
 }

@@ -1,8 +1,8 @@
 /** The UI's Sokosumi flow with a fake local proxy: it ends like the x402 flow, with collect checked. */
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { runSokosumi, sokosumiSteps, type SokosumiStepId } from "../src/ui/sokosumiFlow.js";
-import { updateStep, type Step } from "../src/ui/steps.js";
+import { runSokosumi, sokosumiSteps, type SokosumiStepId } from "../frontend/src/masumi/sokosumiFlow.ts";
+import { updateStep, type Step } from "../frontend/src/masumi/steps.ts";
 
 function run(statuses: string[]) {
   let steps: Step[] = sokosumiSteps();
